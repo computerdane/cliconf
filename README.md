@@ -26,10 +26,12 @@ Add one or more locations of config files:
 Load flags:
 
 ```rs
-  // Load from config files, environment, and program args
-  flags.load(&env::vars().collect(), &env::args().collect())?;
-  // Collect positional arguments (non-flags)
-  let positionals = flags.positionals();
+  let env_vars: HashMap<String, String> = env::vars().collect();
+
+  let args: Vec<String> = env::args().collect();
+  let args = args[1..].to_vec(); // Exclude name of executable
+
+  flags.load(&env_vars, &args)?;
 ```
 
 Get values:
@@ -37,6 +39,12 @@ Get values:
 ```rs
   let name = flags.get_string("hello-name");
   println!("Hello, {name}!");
+```
+
+Get non-flag arguments:
+
+```rs
+  let positionals = flags.positionals();
 ```
 
 # Using Flags
