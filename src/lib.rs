@@ -449,6 +449,10 @@ impl<'a> Flags<'a> {
 
         Ok(())
     }
+
+    pub fn positionals(&self) -> &Vec<String> {
+        &self.positionals
+    }
 }
 
 #[cfg(test)]

@@ -177,10 +177,26 @@ fn test_load_env_vars_with_override() -> Result<(), String> {
     Ok(())
 }
 
+fn assert_positionals_match(positionals: &Vec<String>) {
+    assert_eq!(
+        *positionals,
+        to_string_vec(&vec![
+            "pos0",
+            "pos1",
+            "pos2",
+            "-",
+            "pos3",
+            "--not-a-flag",
+            "-f"
+        ])
+    );
+}
+
 #[test]
 fn test_load_args() -> Result<(), String> {
     let mut flags = sample_flags();
     let args = to_string_vec(&vec![
+        "pos0",
         "-h",
         "localhost",
         "-p",
@@ -188,6 +204,7 @@ fn test_load_args() -> Result<(), String> {
         "--max-size",
         "999999999999999",
         "--timeout",
+        "pos1",
         "--timeout-sec",
         "1.5",
         "--user",
@@ -198,19 +215,26 @@ fn test_load_args() -> Result<(), String> {
         "5000",
         "--udp-port",
         "5001",
+        "pos2",
         "--udp-port",
         "5002",
         "--allowed-input-range",
         "20000000000000",
+        "-",
         "--allowed-input-range",
         "30000000000000",
         "--allowed-output-range",
         "6.5",
         "--allowed-output-range",
         "8.5",
+        "pos3",
+        "--",
+        "--not-a-flag",
+        "-f",
     ]);
     flags.load(&HashMap::new(), &args)?;
     assert_values_match(&flags);
+    assert_positionals_match(&flags.positionals());
     Ok(())
 }
 
@@ -223,8 +247,22 @@ fn test_double_override() -> Result<(), String> {
     env_vars.insert("PORT".to_string(), "8080".to_string());
     env_vars.insert("USER".to_string(), "john,aria".to_string());
     env_vars.insert("UDP_PORT".to_string(), "4000,4001".to_string());
-    let args = to_string_vec(&vec!["-h", "127.0.0.2", "--udp-port", "3000"]);
+    let args = to_string_vec(&vec![
+        "pos0",
+        "-h",
+        "127.0.0.2",
+        "pos1",
+        "--udp-port",
+        "3000",
+        "pos2",
+        "-",
+        "pos3",
+        "--",
+        "--not-a-flag",
+        "-f",
+    ]);
     flags.load(&env_vars, &args)?;
     assert_double_overridden_values_match(&flags);
+    assert_positionals_match(&flags.positionals());
     Ok(())
 }
