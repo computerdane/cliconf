@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fs::File, io::Read, path::Path};
 
+use dirs::home_dir;
 use regex::Regex;
 use serde_json::Value;
 
@@ -74,6 +75,16 @@ impl<'a> Flags<'a> {
 
     pub fn add_config_file(&mut self, path: &str) {
         self.config_files.push(path.to_string())
+    }
+
+    pub fn add_home_config_file(&mut self, path: &str) {
+        if let Some(home) = home_dir() {
+            let path = home.join(path);
+            let path = path.to_str().unwrap();
+            self.add_config_file(path);
+        } else {
+            eprintln!("Warning: Could not locate user home directory!")
+        }
     }
 
     pub fn add(&mut self, flag: Flag<'a>) {
