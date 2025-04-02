@@ -229,7 +229,7 @@ impl<'a> Gears<'a> {
         let mut need_value_for_name = String::new();
         let mut as_positionals = false;
 
-        for arg in args {
+        for arg in &args[1..] {
             let arg = arg.to_string();
             if as_positionals {
                 self.positionals.push(arg);
@@ -325,7 +325,7 @@ impl<'a> Gears<'a> {
         Ok(())
     }
 
-    pub fn load(&mut self, args: Vec<String>) -> Result<(), String> {
+    pub fn load(&mut self) -> Result<(), String> {
         // 1. Config files
         for path in &self.config_files {
             if Path::new(path).exists() {
@@ -352,7 +352,7 @@ impl<'a> Gears<'a> {
         }
 
         // 3. Args
-        self.parse_args(args)?;
+        self.parse_args(env::args().collect())?;
 
         Ok(())
     }
@@ -489,8 +489,24 @@ mod tests {
         Ok(())
     }
 
+    fn sample_json() -> String {
+        String::from(
+            r#"
+            {
+               "my-bool": true,
+               "my-string": "0",
+               "my-int64": 0,
+               "my-int128": 0,
+               "my-float64": 0.0 
+            }"#,
+        )
+    }
+
     #[test]
-    fn test_load() -> Result<(), String> {
+    fn test_parse_json() -> Result<(), String> {
+        let mut gears = sample_gears();
+        Gears::parse_json(&mut gears.flag_values, sample_json())?;
+        assert_new_values_match(&gears);
         Ok(())
     }
 }
