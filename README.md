@@ -12,7 +12,7 @@ flags.add(Flag {
     name: "hello-name",
     shorthand: Some('n'),
     default_value: FlagValue::String("world".to_string()),
-    description: "Who to say hello to.",
+    description: Some("Who to say hello to."),
 });
 ```
 
