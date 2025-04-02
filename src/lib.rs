@@ -5,15 +5,15 @@ use serde_json::Value;
 
 #[derive(Clone)]
 pub enum FlagValue {
-    BoolValue(bool),
-    StringValue(String),
-    Int64Value(i64),
-    Int128Value(i128),
-    Float64Value(f64),
-    StringArrayValue(Vec<String>),
-    Int64ArrayValue(Vec<i64>),
-    Int128ArrayValue(Vec<i128>),
-    Float64ArrayValue(Vec<f64>),
+    Bool(bool),
+    String(String),
+    Int64(i64),
+    Int128(i128),
+    Float64(f64),
+    StringArray(Vec<String>),
+    Int64Array(Vec<i64>),
+    Int128Array(Vec<i128>),
+    Float64Array(Vec<f64>),
 }
 
 pub struct Flag<'a> {
@@ -107,7 +107,7 @@ impl<'a> Gears<'a> {
 
     pub fn get_bool(&self, name: &str) -> &bool {
         match self.flag_values.get(name) {
-            Some(FlagValue::BoolValue(v)) => v,
+            Some(FlagValue::Bool(v)) => v,
             None => panic!("Flag '{name}' does not exist!"),
             _ => panic!("Flag '{name}' is not of type bool!"),
         }
@@ -115,7 +115,7 @@ impl<'a> Gears<'a> {
 
     pub fn get_string(&self, name: &str) -> &String {
         match self.flag_values.get(name) {
-            Some(FlagValue::StringValue(v)) => v,
+            Some(FlagValue::String(v)) => v,
             None => panic!("Flag '{name}' does not exist!"),
             _ => panic!("Flag '{name}' is not of type String!"),
         }
@@ -123,7 +123,7 @@ impl<'a> Gears<'a> {
 
     pub fn get_i64(&self, name: &str) -> &i64 {
         match self.flag_values.get(name) {
-            Some(FlagValue::Int64Value(v)) => v,
+            Some(FlagValue::Int64(v)) => v,
             None => panic!("Flag '{name}' does not exist!"),
             _ => panic!("Flag '{name}' is not of type i64!"),
         }
@@ -131,7 +131,7 @@ impl<'a> Gears<'a> {
 
     pub fn get_i128(&self, name: &str) -> &i128 {
         match self.flag_values.get(name) {
-            Some(FlagValue::Int128Value(v)) => v,
+            Some(FlagValue::Int128(v)) => v,
             None => panic!("Flag '{name}' does not exist!"),
             _ => panic!("Flag '{name}' is not of type i128!"),
         }
@@ -139,7 +139,7 @@ impl<'a> Gears<'a> {
 
     pub fn get_f64(&self, name: &str) -> &f64 {
         match self.flag_values.get(name) {
-            Some(FlagValue::Float64Value(v)) => v,
+            Some(FlagValue::Float64(v)) => v,
             None => panic!("Flag '{name}' does not exist!"),
             _ => panic!("Flag '{name}' is not of type f64!"),
         }
@@ -147,7 +147,7 @@ impl<'a> Gears<'a> {
 
     pub fn get_string_array(&self, name: &str) -> &Vec<String> {
         match self.flag_values.get(name) {
-            Some(FlagValue::StringArrayValue(v)) => v,
+            Some(FlagValue::StringArray(v)) => v,
             None => panic!("Flag '{name}' does not exist!"),
             _ => panic!("Flag '{name}' is not of type Vec<String>!"),
         }
@@ -155,7 +155,7 @@ impl<'a> Gears<'a> {
 
     pub fn get_i64_array(&self, name: &str) -> &Vec<i64> {
         match self.flag_values.get(name) {
-            Some(FlagValue::Int64ArrayValue(v)) => v,
+            Some(FlagValue::Int64Array(v)) => v,
             None => panic!("Flag '{name}' does not exist!"),
             _ => panic!("Flag '{name}' is not of type Vec<i64>!"),
         }
@@ -163,7 +163,7 @@ impl<'a> Gears<'a> {
 
     pub fn get_i128_array(&self, name: &str) -> &Vec<i128> {
         match self.flag_values.get(name) {
-            Some(FlagValue::Int128ArrayValue(v)) => v,
+            Some(FlagValue::Int128Array(v)) => v,
             None => panic!("Flag '{name}' does not exist!"),
             _ => panic!("Flag '{name}' is not of type Vec<i128>!"),
         }
@@ -171,7 +171,7 @@ impl<'a> Gears<'a> {
 
     pub fn get_f64_array(&self, name: &str) -> &Vec<f64> {
         match self.flag_values.get(name) {
-            Some(FlagValue::Float64ArrayValue(v)) => v,
+            Some(FlagValue::Float64Array(v)) => v,
             None => panic!("Flag '{name}' does not exist!"),
             _ => panic!("Flag '{name}' is not of type Vec<f64>!"),
         }
@@ -198,35 +198,35 @@ impl<'a> Gears<'a> {
         let name = name;
 
         match flag_values.get_mut(name) {
-            Some(FlagValue::BoolValue(v)) => match value.parse() {
+            Some(FlagValue::Bool(v)) => match value.parse() {
                 Ok(b) => *v = b,
                 Err(_) => return Err(error_msg("bool")),
             },
-            Some(FlagValue::StringValue(v)) => *v = value,
-            Some(FlagValue::Int64Value(v)) => match value.parse() {
+            Some(FlagValue::String(v)) => *v = value,
+            Some(FlagValue::Int64(v)) => match value.parse() {
                 Ok(n) => *v = n,
                 Err(_) => return Err(error_msg("i64")),
             },
-            Some(FlagValue::Int128Value(v)) => match value.parse() {
+            Some(FlagValue::Int128(v)) => match value.parse() {
                 Ok(n) => *v = n,
                 Err(_) => return Err(error_msg("i128")),
             },
-            Some(FlagValue::Float64Value(v)) => match value.parse() {
+            Some(FlagValue::Float64(v)) => match value.parse() {
                 Ok(n) => *v = n,
                 Err(_) => return Err(error_msg("f64")),
             },
-            Some(FlagValue::StringArrayValue(v)) => {
+            Some(FlagValue::StringArray(v)) => {
                 Gears::set_arary(v, value, unset_flags.get_mut(name).unwrap())
             }
-            Some(FlagValue::Int64ArrayValue(v)) => match value.parse() {
+            Some(FlagValue::Int64Array(v)) => match value.parse() {
                 Ok(n) => Gears::set_arary(v, n, unset_flags.get_mut(name).unwrap()),
                 Err(_) => return Err(error_msg("i64")),
             },
-            Some(FlagValue::Int128ArrayValue(v)) => match value.parse() {
+            Some(FlagValue::Int128Array(v)) => match value.parse() {
                 Ok(n) => Gears::set_arary(v, n, unset_flags.get_mut(name).unwrap()),
                 Err(_) => return Err(error_msg("i128")),
             },
-            Some(FlagValue::Float64ArrayValue(v)) => match value.parse() {
+            Some(FlagValue::Float64Array(v)) => match value.parse() {
                 Ok(n) => Gears::set_arary(v, n, unset_flags.get_mut(name).unwrap()),
                 Err(_) => return Err(error_msg("f64")),
             },
@@ -267,7 +267,7 @@ impl<'a> Gears<'a> {
             } else if arg.starts_with("--") {
                 let name = &arg[2..];
                 match self.flag_values.get_mut(name) {
-                    Some(FlagValue::BoolValue(v)) => *v = true,
+                    Some(FlagValue::Bool(v)) => *v = true,
                     Some(_) => need_value_for_name = name.to_string(),
                     None => return Err(format!("Unknown flag: --{name}")),
                 }
@@ -276,7 +276,7 @@ impl<'a> Gears<'a> {
                 for c in shorthands.chars() {
                     match self.shorthand_names.get(&c) {
                         Some(&name) => match self.flag_values.get_mut(name) {
-                            Some(FlagValue::BoolValue(v)) => *v = true,
+                            Some(FlagValue::Bool(v)) => *v = true,
                             Some(_) => need_value_for_name = name.to_string(),
                             None => panic!("shorthand_names contains key '{c}', but flags does not contain key '{name}'"),
                         },
@@ -304,23 +304,23 @@ impl<'a> Gears<'a> {
                         match flag_values.get_mut(name) {
                             Some(flag_value) => match value {
                                 Value::Bool(b) => match flag_value {
-                                    FlagValue::BoolValue(v) => *v = b,
+                                    FlagValue::Bool(v) => *v = b,
                                     _ => return Err(format!("Property '{name}' is not of type bool!"))
                                 },
                                 Value::String(s) => match flag_value {
-                                    FlagValue::StringValue(v) => *v = s,
+                                    FlagValue::String(v) => *v = s,
                                     _ => return Err(format!("Property '{name}' is not of type string!"))
                                 },
                                 Value::Number(number) => match flag_value {
-                                    FlagValue::Int64Value(v) => match number.as_i64() {
+                                    FlagValue::Int64(v) => match number.as_i64() {
                                         Some(n) => *v = n,
                                         None => return Err(format!("Property '{name}' could not be parsed as an i64!")),
                                     },
-                                    FlagValue::Int128Value(v) => match number.as_i128() {
+                                    FlagValue::Int128(v) => match number.as_i128() {
                                         Some(n) => *v = n,
                                         None => return Err(format!("Property '{name}' could not be parsed as an i128!")),
                                     },
-                                    FlagValue::Float64Value(v) => match number.as_f64() {
+                                    FlagValue::Float64(v) => match number.as_f64() {
                                         Some(n) => *v = n,
                                         None => return Err(format!("Property '{name}' could not be parsed as a f64!")),
                                     },
@@ -330,19 +330,19 @@ impl<'a> Gears<'a> {
                                     for array_value in array {
                                         match array_value {
                                             Value::String(s) => match flag_value {
-                                                FlagValue::StringArrayValue(v) => Gears::set_arary(v, s, unset_flags.get_mut(name).unwrap()),
+                                                FlagValue::StringArray(v) => Gears::set_arary(v, s, unset_flags.get_mut(name).unwrap()),
                                                 _ => return Err(format!("Property '{name}' is not of type string[]!"))
                                             },
                                             Value::Number(number) => match flag_value {
-                                                FlagValue::Int64ArrayValue(v) => match number.as_i64() {
+                                                FlagValue::Int64Array(v) => match number.as_i64() {
                                                     Some(n) => Gears::set_arary(v, n, unset_flags.get_mut(name).unwrap()),
                                                     None => return Err(format!("Property '{name}' could not be parsed as a Vec<i64>!")),
                                                 },
-                                                FlagValue::Int128ArrayValue(v) => match number.as_i128() {
+                                                FlagValue::Int128Array(v) => match number.as_i128() {
                                                     Some(n) => Gears::set_arary(v, n, unset_flags.get_mut(name).unwrap()),
                                                     None => return Err(format!("Property '{name}' could not be parsed as a Vec<i128>!")),
                                                 },
-                                                FlagValue::Float64ArrayValue(v) => match number.as_f64() {
+                                                FlagValue::Float64Array(v) => match number.as_f64() {
                                                     Some(n) => Gears::set_arary(v, n, unset_flags.get_mut(name).unwrap()),
                                                     None => return Err(format!("Property '{name}' could not be parsed as a Vec<f64>!")),
                                                 },
@@ -415,7 +415,7 @@ mod tests {
         return Flag {
             name: "my-bool",
             shorthand: Some('b'),
-            default_value: FlagValue::BoolValue(false),
+            default_value: FlagValue::Bool(false),
             description: None,
         };
     }
@@ -455,55 +455,55 @@ mod tests {
         gears.add(Flag {
             name: "my-bool",
             shorthand: Some('b'),
-            default_value: FlagValue::BoolValue(false),
+            default_value: FlagValue::Bool(false),
             description: None,
         });
         gears.add(Flag {
             name: "my-string",
             shorthand: Some('s'),
-            default_value: FlagValue::StringValue("1".to_string()),
+            default_value: FlagValue::String("1".to_string()),
             description: None,
         });
         gears.add(Flag {
             name: "my-int64",
             shorthand: Some('i'),
-            default_value: FlagValue::Int64Value(1),
+            default_value: FlagValue::Int64(1),
             description: None,
         });
         gears.add(Flag {
             name: "my-int128",
             shorthand: Some('j'),
-            default_value: FlagValue::Int128Value(1),
+            default_value: FlagValue::Int128(1),
             description: None,
         });
         gears.add(Flag {
             name: "my-float64",
             shorthand: Some('f'),
-            default_value: FlagValue::Float64Value(1.0),
+            default_value: FlagValue::Float64(1.0),
             description: None,
         });
         gears.add(Flag {
             name: "my-string-array",
             shorthand: Some('S'),
-            default_value: FlagValue::StringArrayValue(to_string_vec(vec!["1", "2"])),
+            default_value: FlagValue::StringArray(to_string_vec(vec!["1", "2"])),
             description: None,
         });
         gears.add(Flag {
             name: "my-int64-array",
             shorthand: Some('I'),
-            default_value: FlagValue::Int64ArrayValue(vec![1, 2]),
+            default_value: FlagValue::Int64Array(vec![1, 2]),
             description: None,
         });
         gears.add(Flag {
             name: "my-int128-array",
             shorthand: Some('J'),
-            default_value: FlagValue::Int128ArrayValue(vec![1, 2]),
+            default_value: FlagValue::Int128Array(vec![1, 2]),
             description: None,
         });
         gears.add(Flag {
             name: "my-float64-array",
             shorthand: Some('F'),
-            default_value: FlagValue::Float64ArrayValue(vec![1.0, 2.0]),
+            default_value: FlagValue::Float64Array(vec![1.0, 2.0]),
             description: None,
         });
         return gears;
