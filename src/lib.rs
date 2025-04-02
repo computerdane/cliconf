@@ -334,39 +334,39 @@ impl<'a> Gears<'a> {
 mod tests {
     use super::*;
 
-    #[test]
-    #[should_panic]
-    fn test_assert_valid_fails_invalid_name() {
-        let invalid_flag = Flag {
-            name: "My Invalid Flag Name!",
-            shorthand: Some('b'),
-            default_value: FlagValue::BoolValue(false),
-            description: None,
-        };
-        invalid_flag.assert_valid().unwrap();
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_assert_valid_fails_invalid_shorthand() {
-        let invalid_flag = Flag {
-            name: "my-bool",
-            shorthand: Some('$'),
-            default_value: FlagValue::BoolValue(false),
-            description: None,
-        };
-        invalid_flag.assert_valid().unwrap();
-    }
-
-    #[test]
-    fn test_assert_valid() {
-        let invalid_flag = Flag {
+    fn sample_flag<'a>() -> Flag<'a> {
+        return Flag {
             name: "my-bool",
             shorthand: Some('b'),
             default_value: FlagValue::BoolValue(false),
             description: None,
         };
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_flag_assert_valid_fails_invalid_name() {
+        let mut invalid_flag = sample_flag();
+        invalid_flag.name = "My Invalid Flag Name!";
         invalid_flag.assert_valid().unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_flag_assert_valid_fails_invalid_shorthand() {
+        let mut invalid_flag = sample_flag();
+        invalid_flag.shorthand = Some('$');
+        invalid_flag.assert_valid().unwrap();
+    }
+
+    #[test]
+    fn test_flag_assert_valid() {
+        sample_flag().assert_valid().unwrap();
+    }
+
+    #[test]
+    fn test_flag_env_var_name() {
+        assert!(sample_flag().env_var_name() == "MY_BOOL")
     }
 
     fn init_gears<'a>() -> Gears<'a> {
