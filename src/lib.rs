@@ -354,7 +354,7 @@ impl<'a> Gears<'a> {
                                 },
                                 _ => return Err(format!("Property '{name}' is of the wrong type!")),
                             },
-                            None => return Err(format!("Property '{name}' does not exist!"))
+                            None => return Err(format!("Unknown property: {name}"))
                         }
                     }
                 },
