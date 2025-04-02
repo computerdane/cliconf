@@ -265,8 +265,12 @@ impl<'a> Gears<'a> {
                 }
                 need_value_for_name = String::from("");
             } else if arg == "-" {
+                // Some programs use "-" to signify that data will be read from
+                // stdin, so we treat it as a positional argument
                 self.positionals.push(arg)
             } else if arg == "--" {
+                // "--" is a special flag that treats all of the remaining
+                // arguments as positional arguments
                 as_positionals = true;
             } else if arg.starts_with("--") {
                 let name = &arg[2..];
