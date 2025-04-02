@@ -5,6 +5,7 @@ edition = "2021"
 description = "Dead-simple configuration for Rust CLI tools."
 repository = "https://github.com/computerdane/cliconf"
 license-file = "LICENSE"
+exclude = [".envrc", "flake*"]
 
 [dependencies]
 dirs = "6.0.0"
