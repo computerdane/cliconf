@@ -28,6 +28,7 @@ pub struct Gears<'a> {
     flag_values: HashMap<&'a str, FlagValue>,
     unset_flags: HashMap<&'a str, bool>,
     shorthand_names: HashMap<char, &'a str>,
+    env_var_delimiters: HashMap<&'a str, &'a str>,
     positionals: Vec<String>,
     config_files: Vec<String>,
 }
@@ -65,6 +66,7 @@ impl<'a> Gears<'a> {
             flag_values: HashMap::new(),
             unset_flags: HashMap::new(),
             shorthand_names: HashMap::new(),
+            env_var_delimiters: HashMap::new(),
             positionals: vec![],
             config_files: vec![],
         }
@@ -96,6 +98,13 @@ impl<'a> Gears<'a> {
         self.flags.insert(name, flag);
         self.flag_values.insert(name, default_value);
         self.unset_flags.insert(name, true);
+    }
+
+    pub fn set_env_var_delimiter(&mut self, name: &'a str, delimiter: &'a str) {
+        if !self.flags.contains_key(name) {
+            panic!("Cannot set env var delimiter for unknown flag '{name}'")
+        }
+        self.env_var_delimiters.insert(name, delimiter);
     }
 
     pub fn set(flag_values: &mut HashMap<&'a str, FlagValue>, name: &str, value: FlagValue) {
@@ -392,12 +401,32 @@ impl<'a> Gears<'a> {
         // 2. Environment variables
         for flag in self.flags.values() {
             if let Some(value) = env_vars.get(&flag.env_var_name()) {
-                Gears::parse_string_and_set(
-                    &mut self.flag_values,
-                    &mut self.unset_flags,
-                    &String::from(flag.name),
-                    value,
-                )?
+                match flag.default_value {
+                    FlagValue::StringArray(_)
+                    | FlagValue::Int64Array(_)
+                    | FlagValue::Int128Array(_)
+                    | FlagValue::Float64Array(_) => match self.env_var_delimiters.get(flag.name) {
+                        Some(delim) => for item in value.split(delim) {
+                            Gears::parse_string_and_set(
+                                &mut self.flag_values,
+                                &mut self.unset_flags,
+                                &String::from(flag.name),
+                                &item.to_string(),
+                            )?
+                        },
+                        None => eprintln!(
+                            "Warning: Setting '{}' using the environment variable '{}' is unsupported.",
+                            flag.name,
+                            flag.env_var_name()
+                        ),
+                    },
+                    _ => Gears::parse_string_and_set(
+                        &mut self.flag_values,
+                        &mut self.unset_flags,
+                        &String::from(flag.name),
+                        value,
+                    )?,
+                }
             }
         }
 

@@ -80,24 +80,28 @@ fn sample_gears<'a>() -> Gears<'a> {
         default_value: FlagValue::StringArray(Vec::new()),
         description: None,
     });
+    gears.set_env_var_delimiter("user", ",");
     gears.add(Flag {
         name: "udp-port",
         shorthand: None,
         default_value: FlagValue::Int64Array(Vec::new()),
         description: None,
     });
+    gears.set_env_var_delimiter("udp-port", ",");
     gears.add(Flag {
         name: "allowed-input-range",
         shorthand: None,
         default_value: FlagValue::Int128Array(Vec::new()),
         description: None,
     });
+    gears.set_env_var_delimiter("allowed-input-range", "-");
     gears.add(Flag {
         name: "allowed-output-range",
         shorthand: None,
         default_value: FlagValue::Float64Array(Vec::new()),
         description: None,
     });
+    gears.set_env_var_delimiter("allowed-output-range", "-");
     gears
 }
 
@@ -111,11 +115,46 @@ fn test_load_config_file() -> Result<(), String> {
 }
 
 #[test]
-fn test_load_config_files() -> Result<(), String> {
+fn test_load_config_files_with_override() -> Result<(), String> {
     let mut gears = sample_gears();
     gears.add_config_file("tests/sample_config.json");
     gears.add_config_file("tests/sample_config_override.json");
     gears.load(&HashMap::new(), &Vec::new())?;
+    assert_overridden_values_match(&gears);
+    Ok(())
+}
+
+#[test]
+fn test_load_env_vars() -> Result<(), String> {
+    let mut gears = sample_gears();
+    let mut env_vars = HashMap::new();
+    env_vars.insert("HOST".to_string(), "localhost".to_string());
+    env_vars.insert("PORT".to_string(), "3000".to_string());
+    env_vars.insert("MAX_SIZE".to_string(), "999999999999999".to_string());
+    env_vars.insert("TIMEOUT".to_string(), "true".to_string());
+    env_vars.insert("TIMEOUT_SEC".to_string(), "1.5".to_string());
+    env_vars.insert("USER".to_string(), "scott,allie".to_string());
+    env_vars.insert("UDP_PORT".to_string(), "5000,5001,5002".to_string());
+    env_vars.insert(
+        "ALLOWED_INPUT_RANGE".to_string(),
+        "20000000000000-30000000000000".to_string(),
+    );
+    env_vars.insert("ALLOWED_OUTPUT_RANGE".to_string(), "6.5-8.5".to_string());
+    gears.load(&env_vars, &Vec::new())?;
+    assert_values_match(&gears);
+    Ok(())
+}
+
+#[test]
+fn test_load_env_vars_with_override() -> Result<(), String> {
+    let mut gears = sample_gears();
+    let mut env_vars = HashMap::new();
+    gears.add_config_file("tests/sample_config.json");
+    env_vars.insert("HOST".to_string(), "127.0.0.1".to_string());
+    env_vars.insert("PORT".to_string(), "8080".to_string());
+    env_vars.insert("USER".to_string(), "john,aria".to_string());
+    env_vars.insert("UDP_PORT".to_string(), "4000,4001".to_string());
+    gears.load(&env_vars, &Vec::new())?;
     assert_overridden_values_match(&gears);
     Ok(())
 }
