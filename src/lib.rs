@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, fs::File, io::Read, path::Path};
+use std::{collections::HashMap, fs::File, io::Read, path::Path};
 
 use regex::Regex;
 use serde_json::Value;
@@ -190,7 +190,7 @@ impl<'a> Gears<'a> {
         flag_values: &mut HashMap<&'a str, FlagValue>,
         unset_flags: &mut HashMap<&'a str, bool>,
         name: &str,
-        value: String,
+        value: &String,
     ) -> Result<(), String> {
         let error_msg =
             |t: &str| format!("Failed to parse type {t} from flag '{name}' with value '{value}'");
@@ -202,7 +202,7 @@ impl<'a> Gears<'a> {
                 Ok(b) => *v = b,
                 Err(_) => return Err(error_msg("bool")),
             },
-            Some(FlagValue::String(v)) => *v = value,
+            Some(FlagValue::String(v)) => *v = value.to_string(),
             Some(FlagValue::Int64(v)) => match value.parse() {
                 Ok(n) => *v = n,
                 Err(_) => return Err(error_msg("i64")),
@@ -216,7 +216,7 @@ impl<'a> Gears<'a> {
                 Err(_) => return Err(error_msg("f64")),
             },
             Some(FlagValue::StringArray(v)) => {
-                Gears::set_arary(v, value, unset_flags.get_mut(name).unwrap())
+                Gears::set_arary(v, value.to_string(), unset_flags.get_mut(name).unwrap())
             }
             Some(FlagValue::Int64Array(v)) => match value.parse() {
                 Ok(n) => Gears::set_arary(v, n, unset_flags.get_mut(name).unwrap()),
@@ -236,7 +236,7 @@ impl<'a> Gears<'a> {
         Ok(())
     }
 
-    fn parse_args(&mut self, args: Vec<String>) -> Result<(), String> {
+    fn parse_args(&mut self, args: &Vec<String>) -> Result<(), String> {
         if args.len() <= 1 {
             return Ok(());
         }
@@ -253,7 +253,7 @@ impl<'a> Gears<'a> {
                     &mut self.flag_values,
                     &mut self.unset_flags,
                     &need_value_for_name,
-                    arg,
+                    &arg,
                 )?;
                 need_value_for_name = String::from("");
             } else if arg == "-" {
@@ -293,8 +293,7 @@ impl<'a> Gears<'a> {
 
     fn parse_json(
         flag_values: &mut HashMap<&'a str, FlagValue>,
-        unset_flags: &mut HashMap<&'a str, bool>,
-        json: String,
+        json: &String,
     ) -> Result<(), String> {
         match serde_json::from_str::<Value>(&json) {
             Ok(data) => match data {
@@ -327,23 +326,23 @@ impl<'a> Gears<'a> {
                                     _ => return Err(format!("Property '{name}' is not of type number!"))
                                 },
                                 Value::Array(array) => {
-                                    for array_value in array {
+                                    for (i, array_value) in array.iter().enumerate() {
                                         match array_value {
                                             Value::String(s) => match flag_value {
-                                                FlagValue::StringArray(v) => Gears::set_arary(v, s, unset_flags.get_mut(name).unwrap()),
+                                                FlagValue::StringArray(v) => if i == 0 { *v = vec![s.to_string()]} else {v.push(s.to_string())},
                                                 _ => return Err(format!("Property '{name}' is not of type string[]!"))
                                             },
                                             Value::Number(number) => match flag_value {
                                                 FlagValue::Int64Array(v) => match number.as_i64() {
-                                                    Some(n) => Gears::set_arary(v, n, unset_flags.get_mut(name).unwrap()),
+                                                    Some(n) => if i == 0 { *v = vec![n]} else {v.push(n)},
                                                     None => return Err(format!("Property '{name}' could not be parsed as a Vec<i64>!")),
                                                 },
                                                 FlagValue::Int128Array(v) => match number.as_i128() {
-                                                    Some(n) => Gears::set_arary(v, n, unset_flags.get_mut(name).unwrap()),
+                                                    Some(n) => if i == 0 { *v = vec![n]} else {v.push(n)},
                                                     None => return Err(format!("Property '{name}' could not be parsed as a Vec<i128>!")),
                                                 },
                                                 FlagValue::Float64Array(v) => match number.as_f64() {
-                                                    Some(n) => Gears::set_arary(v, n, unset_flags.get_mut(name).unwrap()),
+                                                    Some(n) => if i == 0 { *v = vec![n]} else {v.push(n)},
                                                     None => return Err(format!("Property '{name}' could not be parsed as a Vec<f64>!")),
                                                 },
                                                 _ => return Err(format!("Property '{name}' is not of type number[]!"))
@@ -367,7 +366,11 @@ impl<'a> Gears<'a> {
         Ok(())
     }
 
-    pub fn load(&mut self) -> Result<(), String> {
+    pub fn load(
+        &mut self,
+        env_vars: &HashMap<String, String>,
+        args: &Vec<String>,
+    ) -> Result<(), String> {
         // 1. Config files
         for path in &self.config_files {
             if Path::new(path).exists() {
@@ -377,9 +380,7 @@ impl<'a> Gears<'a> {
                         if let Err(err) = file.read_to_string(&mut json) {
                             eprintln!("Failed to read config file '{path}': {err}")
                         }
-                        if let Err(err) =
-                            Gears::parse_json(&mut self.flag_values, &mut self.unset_flags, json)
-                        {
+                        if let Err(err) = Gears::parse_json(&mut self.flag_values, &json) {
                             eprintln!("Config file '{path}' is invalid: {err}")
                         }
                     }
@@ -390,7 +391,7 @@ impl<'a> Gears<'a> {
 
         // 2. Environment variables
         for flag in self.flags.values() {
-            if let Ok(value) = env::var(flag.env_var_name()) {
+            if let Some(value) = env_vars.get(&flag.env_var_name()) {
                 Gears::parse_string_and_set(
                     &mut self.flag_values,
                     &mut self.unset_flags,
@@ -401,7 +402,7 @@ impl<'a> Gears<'a> {
         }
 
         // 3. Args
-        self.parse_args(env::args().collect())?;
+        self.parse_args(args)?;
 
         Ok(())
     }
@@ -446,7 +447,7 @@ mod tests {
         assert!(sample_flag().env_var_name() == "MY_BOOL")
     }
 
-    fn to_string_vec(strs: Vec<&str>) -> Vec<String> {
+    fn to_string_vec(strs: &Vec<&str>) -> Vec<String> {
         strs.iter().map(|s| s.to_string()).collect()
     }
 
@@ -485,7 +486,7 @@ mod tests {
         gears.add(Flag {
             name: "my-string-array",
             shorthand: Some('S'),
-            default_value: FlagValue::StringArray(to_string_vec(vec!["1", "2"])),
+            default_value: FlagValue::StringArray(to_string_vec(&vec!["1", "2"])),
             description: None,
         });
         gears.add(Flag {
@@ -506,7 +507,7 @@ mod tests {
             default_value: FlagValue::Float64Array(vec![1.0, 2.0]),
             description: None,
         });
-        return gears;
+        gears
     }
 
     #[test]
@@ -519,7 +520,7 @@ mod tests {
         assert_eq!(*gears.get_f64("my-float64"), 1.0);
         assert_eq!(
             *gears.get_string_array("my-string-array"),
-            to_string_vec(vec!["1", "2"])
+            to_string_vec(&vec!["1", "2"])
         );
         assert_eq!(*gears.get_i64_array("my-int64-array"), vec![1, 2]);
         assert_eq!(*gears.get_i128_array("my-int128-array"), vec![1, 2]);
@@ -534,7 +535,7 @@ mod tests {
         assert_eq!(*gears.get_f64("my-float64"), 0.0);
         assert_eq!(
             *gears.get_string_array("my-string-array"),
-            to_string_vec(vec!["3", "4"])
+            to_string_vec(&vec!["3", "4"])
         );
         assert_eq!(*gears.get_i64_array("my-int64-array"), vec![3, 4]);
         assert_eq!(*gears.get_i128_array("my-int128-array"), vec![3, 4]);
@@ -548,86 +549,86 @@ mod tests {
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-bool",
-            "true".to_string(),
+            &"true".to_string(),
         )?;
         Gears::parse_string_and_set(
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-string",
-            "0".to_string(),
+            &"0".to_string(),
         )?;
         Gears::parse_string_and_set(
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-int64",
-            "0".to_string(),
+            &"0".to_string(),
         )?;
         Gears::parse_string_and_set(
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-int128",
-            "0".to_string(),
+            &"0".to_string(),
         )?;
         Gears::parse_string_and_set(
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-float64",
-            "0.0".to_string(),
+            &"0.0".to_string(),
         )?;
         Gears::parse_string_and_set(
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-string-array",
-            "3".to_string(),
+            &"3".to_string(),
         )?;
         Gears::parse_string_and_set(
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-string-array",
-            "4".to_string(),
+            &"4".to_string(),
         )?;
         Gears::parse_string_and_set(
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-int64-array",
-            "3".to_string(),
+            &"3".to_string(),
         )?;
         Gears::parse_string_and_set(
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-int64-array",
-            "4".to_string(),
+            &"4".to_string(),
         )?;
         Gears::parse_string_and_set(
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-int128-array",
-            "3".to_string(),
+            &"3".to_string(),
         )?;
         Gears::parse_string_and_set(
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-int128-array",
-            "4".to_string(),
+            &"4".to_string(),
         )?;
         Gears::parse_string_and_set(
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-float64-array",
-            "3.0".to_string(),
+            &"3.0".to_string(),
         )?;
         Gears::parse_string_and_set(
             &mut gears.flag_values,
             &mut gears.unset_flags,
             "my-float64-array",
-            "4.0".to_string(),
+            &"4.0".to_string(),
         )?;
         assert_new_values_match(&gears);
         Ok(())
     }
 
     fn sample_args() -> Vec<String> {
-        to_string_vec(vec![
+        to_string_vec(&vec![
             "cmd",
             "--my-bool",
             "--my-string",
@@ -658,7 +659,7 @@ mod tests {
     }
 
     fn sample_args_shorthand() -> Vec<String> {
-        to_string_vec(vec![
+        to_string_vec(&vec![
             "cmd", "-b", "-s", "0", "-i", "0", "-j", "0", "-f", "0.0", "-S", "3", "-S", "4", "-I",
             "3", "-I", "4", "-J", "3", "-J", "4", "-F", "3.0", "-F", "4.0",
         ])
@@ -667,7 +668,7 @@ mod tests {
     #[test]
     fn test_parse_args() -> Result<(), String> {
         let mut gears = sample_gears();
-        gears.parse_args(sample_args())?;
+        gears.parse_args(&sample_args())?;
         assert_new_values_match(&gears);
         Ok(())
     }
@@ -675,7 +676,7 @@ mod tests {
     #[test]
     fn test_parse_args_shorthand() -> Result<(), String> {
         let mut gears = sample_gears();
-        gears.parse_args(sample_args_shorthand())?;
+        gears.parse_args(&sample_args_shorthand())?;
         assert_new_values_match(&gears);
         Ok(())
     }
@@ -700,11 +701,7 @@ mod tests {
     #[test]
     fn test_parse_json() -> Result<(), String> {
         let mut gears = sample_gears();
-        Gears::parse_json(
-            &mut gears.flag_values,
-            &mut gears.unset_flags,
-            sample_json(),
-        )?;
+        Gears::parse_json(&mut gears.flag_values, &sample_json())?;
         assert_new_values_match(&gears);
         Ok(())
     }
