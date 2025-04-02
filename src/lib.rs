@@ -334,7 +334,42 @@ impl<'a> Gears<'a> {
 mod tests {
     use super::*;
 
-    fn init<'a>() -> Gears<'a> {
+    #[test]
+    #[should_panic]
+    fn test_assert_valid_fails_invalid_name() {
+        let invalid_flag = Flag {
+            name: "My Invalid Flag Name!",
+            shorthand: Some('b'),
+            default_value: FlagValue::BoolValue(false),
+            description: None,
+        };
+        invalid_flag.assert_valid().unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_assert_valid_fails_invalid_shorthand() {
+        let invalid_flag = Flag {
+            name: "my-bool",
+            shorthand: Some('$'),
+            default_value: FlagValue::BoolValue(false),
+            description: None,
+        };
+        invalid_flag.assert_valid().unwrap();
+    }
+
+    #[test]
+    fn test_assert_valid() {
+        let invalid_flag = Flag {
+            name: "my-bool",
+            shorthand: Some('b'),
+            default_value: FlagValue::BoolValue(false),
+            description: None,
+        };
+        invalid_flag.assert_valid().unwrap();
+    }
+
+    fn init_gears<'a>() -> Gears<'a> {
         let mut gears = Gears::new();
         gears.add(Flag {
             name: "my-bool",
@@ -375,22 +410,9 @@ mod tests {
         return gears;
     }
 
-    fn assert_new_values(gears: &Gears) {
-        assert!(*gears.get_bool("my-bool") == true);
-        assert!(*gears.get_string("my-string") == "0");
-        assert!(*gears.get_i32("my-int32") == 0);
-        assert!(*gears.get_i64("my-int64") == 0);
-        assert!(*gears.get_f32("my-float32") == 0.0);
-        assert!(*gears.get_f64("my-float64") == 0.0);
-    }
-
-    fn to_string_vec(strs: Vec<&str>) -> Vec<String> {
-        strs.iter().map(|s| s.to_string()).collect()
-    }
-
     #[test]
     fn test_get() {
-        let gears = init();
+        let gears = init_gears();
         assert!(*gears.get_bool("my-bool") == false);
         assert!(*gears.get_string("my-string") == String::from("1"));
         assert!(*gears.get_i32("my-int32") == 1);
@@ -399,22 +421,35 @@ mod tests {
         assert!(*gears.get_f64("my-float64") == 1.0);
     }
 
+    fn assert_new_values_match(gears: &Gears) {
+        assert!(*gears.get_bool("my-bool") == true);
+        assert!(*gears.get_string("my-string") == "0");
+        assert!(*gears.get_i32("my-int32") == 0);
+        assert!(*gears.get_i64("my-int64") == 0);
+        assert!(*gears.get_f32("my-float32") == 0.0);
+        assert!(*gears.get_f64("my-float64") == 0.0);
+    }
+
     #[test]
     fn test_parse_string_and_set() -> Result<(), String> {
-        let mut gears = init();
+        let mut gears = init_gears();
         Gears::parse_string_and_set(&mut gears.flag_values, "my-bool", String::from("true"))?;
         Gears::parse_string_and_set(&mut gears.flag_values, "my-string", String::from("0"))?;
         Gears::parse_string_and_set(&mut gears.flag_values, "my-int32", String::from("0"))?;
         Gears::parse_string_and_set(&mut gears.flag_values, "my-int64", String::from("0"))?;
         Gears::parse_string_and_set(&mut gears.flag_values, "my-float32", String::from("0.0"))?;
         Gears::parse_string_and_set(&mut gears.flag_values, "my-float64", String::from("0.0"))?;
-        assert_new_values(&gears);
+        assert_new_values_match(&gears);
         Ok(())
+    }
+
+    fn to_string_vec(strs: Vec<&str>) -> Vec<String> {
+        strs.iter().map(|s| s.to_string()).collect()
     }
 
     #[test]
     fn test_parse_args() -> Result<(), String> {
-        let mut gears = init();
+        let mut gears = init_gears();
         gears.parse_args(to_string_vec(vec![
             "cmd",
             "--my-bool",
@@ -429,7 +464,7 @@ mod tests {
             "--my-float64",
             "0.0",
         ]))?;
-        assert_new_values(&gears);
+        assert_new_values_match(&gears);
         Ok(())
     }
 }
