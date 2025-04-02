@@ -246,14 +246,14 @@ impl<'a> Flags<'a> {
     }
 
     fn parse_args(&mut self, args: &Vec<String>) -> Result<(), String> {
-        if args.len() <= 1 {
+        if args.len() == 0 {
             return Ok(());
         }
 
         let mut need_value_for_name = String::new();
         let mut as_positionals = false;
 
-        for arg in &args[1..] {
+        for arg in args {
             let arg = arg.to_string();
             if as_positionals {
                 self.positionals.push(arg);
@@ -428,6 +428,9 @@ impl<'a> Flags<'a> {
                     )?,
                 }
             }
+        }
+        for is_unset in self.unset_flags.values_mut() {
+            *is_unset = true;
         }
 
         // 3. Args
@@ -658,7 +661,6 @@ mod tests {
 
     fn sample_args() -> Vec<String> {
         to_string_vec(&vec![
-            "cmd",
             "--my-bool",
             "--my-string",
             "0",
@@ -689,8 +691,8 @@ mod tests {
 
     fn sample_args_shorthand() -> Vec<String> {
         to_string_vec(&vec![
-            "cmd", "-b", "-s", "0", "-i", "0", "-j", "0", "-f", "0.0", "-S", "3", "-S", "4", "-I",
-            "3", "-I", "4", "-J", "3", "-J", "4", "-F", "3.0", "-F", "4.0",
+            "-b", "-s", "0", "-i", "0", "-j", "0", "-f", "0.0", "-S", "3", "-S", "4", "-I", "3",
+            "-I", "4", "-J", "3", "-J", "4", "-F", "3.0", "-F", "4.0",
         ])
     }
 
