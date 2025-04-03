@@ -1,4 +1,11 @@
-use std::{collections::HashMap, fs::File, io::Read, path::Path};
+pub mod usage;
+
+use std::{
+    collections::{HashMap, HashSet},
+    fs::File,
+    io::Read,
+    path::Path,
+};
 
 use dirs::home_dir;
 use regex::Regex;
@@ -30,6 +37,7 @@ pub struct Flags<'a> {
     unset_flags: HashMap<&'a str, bool>,
     shorthand_names: HashMap<char, &'a str>,
     env_var_delimiters: HashMap<&'a str, &'a str>,
+    flags_excluded_from_usage: HashSet<&'a str>,
     positionals: Vec<String>,
     config_files: Vec<String>,
 }
@@ -68,6 +76,7 @@ impl<'a> Flags<'a> {
             unset_flags: HashMap::new(),
             shorthand_names: HashMap::new(),
             env_var_delimiters: HashMap::new(),
+            flags_excluded_from_usage: HashSet::new(),
             positionals: vec![],
             config_files: vec![],
         }
@@ -116,6 +125,10 @@ impl<'a> Flags<'a> {
             panic!("Cannot set env var delimiter for unknown flag '{name}'")
         }
         self.env_var_delimiters.insert(name, delimiter);
+    }
+
+    pub fn exclude_flag_from_usage(&mut self, name: &'a str) {
+        self.flags_excluded_from_usage.insert(name);
     }
 
     pub fn set(flag_values: &mut HashMap<&'a str, FlagValue>, name: &str, value: FlagValue) {
