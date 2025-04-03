@@ -96,12 +96,6 @@ mod tests {
     #[test]
     fn test_generate() {
         let mut flags = Flags::new();
-        // flags.add(Flag {
-        //     name: "name",
-        //     shorthand: Some('n'),
-        //     default_value: FlagValue::String("john".to_string()),
-        //     description: Some("The person we want to greet"),
-        // });
         flags.add(
             Flag::new("name", FlagValue::String("john".into()))
                 .shorthand('n')
