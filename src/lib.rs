@@ -88,6 +88,7 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
                 let parse_env_op = if field_is_vec {
                     if let Some(delimiter) = delimiter {
                         quote! {
+                            self.#field_name.clear();
                             for value in value.split(&#delimiter) {
                                 #parse_env_value
                                 self.#field_name.push(value);
