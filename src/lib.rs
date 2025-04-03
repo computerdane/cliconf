@@ -28,10 +28,14 @@ fn is_vec(ty: &Type) -> bool {
         if let Some(segment) = path.segments.last() {
             if segment.ident == "Vec" {
                 if let PathArguments::AngleBracketed(args) = &segment.arguments {
-                    return args
-                        .args
-                        .iter()
-                        .any(|arg| matches!(arg, GenericArgument::Type(_)));
+                    for arg in &args.args {
+                        if let GenericArgument::Type(inner_ty) = arg {
+                            if is_bool(&inner_ty) {
+                                panic!("CliConf does not support Vec<bool>!");
+                            }
+                            return true;
+                        }
+                    }
                 }
             }
         }
@@ -162,7 +166,7 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
                     } else if let Some(name) = need_value_for_name {
                         match name {
                             #(#parse_arg)*
-                            _ => {}
+                            _ => panic!("Unknown flag: --{name}")
                         };
                         need_value_for_name = None;
                     } else if arg == "-" {
@@ -177,7 +181,7 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
                         let name = &arg[2..];
                         match name {
                             #(#need_arg)*
-                            _ => {}
+                            _ => panic!("Unknown flag: --{name}")
                         }
                     } else {
                         positionals.push(arg);
