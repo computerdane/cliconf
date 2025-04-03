@@ -1,38 +1,49 @@
-pub mod usage;
-
-use std::{collections::HashMap, fs::File, io::Read, path::Path};
+use core::panic;
+use std::{
+    any::type_name,
+    collections::{HashMap, HashSet},
+    error::Error,
+    fs::File,
+    io::Read,
+    path::Path,
+};
 
 use dirs::home_dir;
+use flag_value::FlagValue;
 use regex::Regex;
 use serde_json::Value;
 
-#[derive(Clone)]
-pub enum FlagValue {
-    Bool(bool),
-    String(String),
-    Int64(i64),
-    Int128(i128),
-    Float64(f64),
-    StringArray(Vec<String>),
-    Int64Array(Vec<i64>),
-    Int128Array(Vec<i128>),
-    Float64Array(Vec<f64>),
+pub mod flag_value;
+
+#[derive(Debug)]
+struct StringError(String);
+
+impl StringError {
+    fn new(msg: String) -> Box<StringError> {
+        Box::new(StringError(msg))
+    }
 }
+
+impl std::fmt::Display for StringError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Error for StringError {}
 
 pub struct Flag {
     name: String,
-    default_value: FlagValue,
-    pub value: FlagValue,
+    default_value: Box<dyn FlagValue>,
+    pub value: Box<dyn FlagValue>,
     pub shorthand: Option<char>,
     pub description: Option<String>,
-    pub env_var_delimiter: Option<String>,
+    env_var_delimiter: Option<String>,
     pub exclude_from_usage: bool,
-
-    is_set: bool,
 }
 
 impl Flag {
-    pub fn new(name: &str, default_value: FlagValue) -> Self {
+    pub fn new(name: &str, default_value: impl FlagValue + Clone + 'static) -> Self {
         let re = Regex::new(r"^([a-z]|[0-9]|-)+$").expect("Failed to compile regex");
         if !re.is_match(name) {
             panic!(
@@ -41,122 +52,31 @@ impl Flag {
             );
         }
         let value = default_value.clone();
-        Self {
+        Flag {
             name: name.to_string(),
-            default_value,
-            value,
+            default_value: Box::new(default_value),
+            value: Box::new(value),
             shorthand: None,
             description: None,
             env_var_delimiter: None,
             exclude_from_usage: false,
-
-            is_set: false,
         }
     }
 
-    fn assert_types_match(&self, value: &FlagValue) {
-        if std::mem::discriminant(&self.value) != std::mem::discriminant(value) {
-            panic!(
-                "Setting value for flag '{}' failed: Type mismatch.",
-                self.name
-            );
-        }
+    pub fn get_name(&self) -> String {
+        self.name.to_owned()
     }
 
-    pub fn set_value(&mut self, value: FlagValue) {
-        self.assert_types_match(&value);
-        self.value = value;
+    pub fn get_default_value(&self) -> &Box<dyn FlagValue> {
+        &self.default_value
     }
 
-    fn set_value_parsed(&mut self, value: String) -> Result<(), String> {
-        let error_msg = |t: &str| {
-            format!(
-                "Failed to parse type {t} from flag '{}' with value '{value}'",
-                self.name
-            )
-        };
-
-        match &mut self.value {
-            FlagValue::Bool(v) => match value.parse() {
-                Ok(b) => *v = b,
-                Err(_) => return Err(error_msg("bool")),
-            },
-            FlagValue::String(v) => *v = value,
-            FlagValue::Int64(v) => match value.parse() {
-                Ok(n) => *v = n,
-                Err(_) => return Err(error_msg("i64")),
-            },
-            FlagValue::Int128(v) => match value.parse() {
-                Ok(n) => *v = n,
-                Err(_) => return Err(error_msg("i128")),
-            },
-            FlagValue::Float64(v) => match value.parse() {
-                Ok(n) => *v = n,
-                Err(_) => return Err(error_msg("f64")),
-            },
-            FlagValue::StringArray(_) => self.append_values(FlagValue::StringArray(vec![value])),
-            FlagValue::Int64Array(_) => match value.parse() {
-                Ok(n) => self.append_values(FlagValue::Int64Array(vec![n])),
-                Err(_) => return Err(error_msg("i64")),
-            },
-            FlagValue::Int128Array(_) => match value.parse() {
-                Ok(n) => self.append_values(FlagValue::Int128Array(vec![n])),
-                Err(_) => return Err(error_msg("i128")),
-            },
-            FlagValue::Float64Array(_) => match value.parse() {
-                Ok(n) => self.append_values(FlagValue::Float64Array(vec![n])),
-                Err(_) => return Err(error_msg("f64")),
-            },
-        };
-
-        Ok(())
+    pub fn get_env_var_delimiter(&self) -> Option<String> {
+        self.env_var_delimiter.clone()
     }
 
-    fn update_array<T>(is_set: &mut bool, array: &mut Vec<T>, values: Vec<T>) {
-        if *is_set {
-            array.extend(values);
-        } else {
-            *array = values;
-            *is_set = true;
-        }
-    }
-
-    pub fn append_values(&mut self, value: FlagValue) {
-        self.assert_types_match(&value);
-        match &mut self.value {
-            FlagValue::StringArray(curr) => {
-                if let FlagValue::StringArray(values) = value {
-                    Flag::update_array(&mut self.is_set, curr, values);
-                } else {
-                    panic!("Flag value type mismatch")
-                }
-            }
-            FlagValue::Int64Array(curr) => {
-                if let FlagValue::Int64Array(values) = value {
-                    Flag::update_array(&mut self.is_set, curr, values);
-                } else {
-                    panic!("Flag value type mismatch")
-                }
-            }
-            FlagValue::Int128Array(curr) => {
-                if let FlagValue::Int128Array(values) = value {
-                    Flag::update_array(&mut self.is_set, curr, values);
-                } else {
-                    panic!("Flag value type mismatch")
-                }
-            }
-            FlagValue::Float64Array(curr) => {
-                if let FlagValue::Float64Array(values) = value {
-                    Flag::update_array(&mut self.is_set, curr, values);
-                } else {
-                    panic!("Flag value type mismatch")
-                }
-            }
-            _ => panic!(
-                "Cannot use append_values() on flag '{}': Flag is not an array.",
-                self.name
-            ),
-        }
+    pub fn get_env_var_name(&self) -> String {
+        self.name.to_uppercase().replace("-", "_")
     }
 
     pub fn shorthand(mut self, c: char) -> Self {
@@ -173,6 +93,9 @@ impl Flag {
     }
 
     pub fn env_var_delimiter(mut self, env_var_delimiter: &str) -> Self {
+        if !self.value.is_vec() {
+            panic!("env_var_delimiter() can only be used on Flags with a Vec<_> value");
+        }
         self.env_var_delimiter = Some(env_var_delimiter.to_string());
         self
     }
@@ -181,23 +104,12 @@ impl Flag {
         self.exclude_from_usage = true;
         self
     }
-
-    pub fn get_name(&self) -> String {
-        self.name.to_owned()
-    }
-
-    pub fn get_default_value(&self) -> FlagValue {
-        self.default_value.clone()
-    }
-
-    pub fn get_env_var_name(&self) -> String {
-        return self.name.to_uppercase().replace("-", "_");
-    }
 }
 
 pub struct Flags {
     flags: HashMap<String, Flag>,
     shorthand_names: HashMap<char, String>,
+    set_flags: HashSet<String>,
     positionals: Vec<String>,
     config_files: Vec<String>,
 }
@@ -207,9 +119,44 @@ impl Flags {
         Flags {
             flags: HashMap::new(),
             shorthand_names: HashMap::new(),
+            set_flags: HashSet::new(),
             positionals: vec![],
             config_files: vec![],
         }
+    }
+
+    pub fn add(&mut self, flag: Flag) {
+        if self.flags.contains_key(&flag.name) {
+            panic!("Flag with name '{}' already exists!", flag.name);
+        }
+
+        if let Some(c) = flag.shorthand {
+            if self.shorthand_names.contains_key(&c) {
+                panic!("Flag with shorthand '{c}' already exists!");
+            }
+            self.shorthand_names.insert(c, flag.name.to_owned());
+        }
+
+        self.flags.insert(flag.name.clone(), flag);
+    }
+
+    pub fn get_flag_value(&self, name: &str) -> &Box<dyn FlagValue> {
+        &self
+            .flags
+            .get(name)
+            .expect(&format!("Unknown flag: {name}"))
+            .value
+    }
+
+    pub fn get<T: FlagValue + Clone + 'static>(&self, name: &str) -> T {
+        self.get_flag_value(name)
+            .as_any()
+            .downcast_ref::<T>()
+            .expect(&format!(
+                "Could not cast flag '{name}' to {}",
+                type_name::<T>()
+            ))
+            .clone()
     }
 
     pub fn add_config_file(&mut self, path: &str) {
@@ -226,138 +173,35 @@ impl Flags {
         }
     }
 
-    pub fn add(&mut self, flag: Flag) {
-        if self.flags.contains_key(&flag.name) {
-            panic!("Flag with name '{}' already exists!", flag.name);
-        }
-
-        if let Some(c) = flag.shorthand {
-            if self.shorthand_names.contains_key(&c) {
-                panic!("Flag with shorthand '{c}' already exists!");
-            }
-            self.shorthand_names.insert(c, flag.name.to_owned());
-        }
-
-        self.flags.insert(flag.name.to_owned(), flag);
-    }
-
-    pub fn get(&self, name: &str) -> &Flag {
-        self.flags
-            .get(name)
-            .expect(&format!("Failed to get unknown flag '{name}'"))
-    }
-
-    pub fn get_mut(&mut self, name: &str) -> &mut Flag {
-        self.flags
-            .get_mut(name)
-            .expect(&format!("Failed to get unknown flag '{name}'"))
-    }
-
-    pub fn get_bool(&self, name: &str) -> bool {
-        match self.flags.get(name) {
-            Some(flag) => match flag.value {
-                FlagValue::Bool(v) => v,
-                _ => panic!("Flag '{name}' is not of type Bool!"),
-            },
-            None => panic!("Flag '{name}' does not exist!"),
-        }
-    }
-    pub fn get_string(&self, name: &str) -> String {
-        match self.flags.get(name) {
-            Some(flag) => match flag.value.to_owned() {
-                FlagValue::String(v) => v,
-                _ => panic!("Flag '{name}' is not of type String!"),
-            },
-            None => panic!("Flag '{name}' does not exist!"),
-        }
-    }
-    pub fn get_i64(&self, name: &str) -> i64 {
-        match self.flags.get(name) {
-            Some(flag) => match flag.value {
-                FlagValue::Int64(v) => v,
-                _ => panic!("Flag '{name}' is not of type i64!"),
-            },
-            None => panic!("Flag '{name}' does not exist!"),
-        }
-    }
-    pub fn get_i128(&self, name: &str) -> i128 {
-        match self.flags.get(name) {
-            Some(flag) => match flag.value {
-                FlagValue::Int128(v) => v,
-                _ => panic!("Flag '{name}' is not of type i128!"),
-            },
-            None => panic!("Flag '{name}' does not exist!"),
-        }
-    }
-    pub fn get_f64(&self, name: &str) -> f64 {
-        match self.flags.get(name) {
-            Some(flag) => match flag.value {
-                FlagValue::Float64(v) => v,
-                _ => panic!("Flag '{name}' is not of type f64!"),
-            },
-            None => panic!("Flag '{name}' does not exist!"),
-        }
-    }
-    pub fn get_string_array(&self, name: &str) -> Vec<String> {
-        match self.flags.get(name) {
-            Some(flag) => match flag.value.to_owned() {
-                FlagValue::StringArray(v) => v,
-                _ => panic!("Flag '{name}' is not of type Vec<String>!"),
-            },
-            None => panic!("Flag '{name}' does not exist!"),
-        }
-    }
-    pub fn get_i64_array(&self, name: &str) -> Vec<i64> {
-        match self.flags.get(name) {
-            Some(flag) => match flag.value.to_owned() {
-                FlagValue::Int64Array(v) => v,
-                _ => panic!("Flag '{name}' is not of type Vec<i64>!"),
-            },
-            None => panic!("Flag '{name}' does not exist!"),
-        }
-    }
-    pub fn get_i128_array(&self, name: &str) -> Vec<i128> {
-        match self.flags.get(name) {
-            Some(flag) => match flag.value.to_owned() {
-                FlagValue::Int128Array(v) => v,
-                _ => panic!("Flag '{name}' is not of type Vec<i128>!"),
-            },
-            None => panic!("Flag '{name}' does not exist!"),
-        }
-    }
-    pub fn get_f64_array(&self, name: &str) -> Vec<f64> {
-        match self.flags.get(name) {
-            Some(flag) => match flag.value.to_owned() {
-                FlagValue::Float64Array(v) => v,
-                _ => panic!("Flag '{name}' is not of type Vec<f64>!"),
-            },
-            None => panic!("Flag '{name}' does not exist!"),
-        }
-    }
-
-    fn parse_args(&mut self, args: &Vec<String>) -> Result<(), String> {
+    fn parse_args(&mut self, args: Vec<String>) -> Result<(), Box<dyn Error>> {
         if args.len() == 0 {
             return Ok(());
         }
 
-        let mut need_value_for_name = String::new();
+        let mut need_value_for_name: Option<String> = None;
         let mut as_positionals = false;
 
         for arg in args {
-            let arg = arg.to_string();
             if as_positionals {
-                self.positionals.push(arg);
-            } else if need_value_for_name != "" {
-                // Flags::parse_string_and_set(&mut self.flags, &need_value_for_name, arg)?;
-                self.flags
-                    .get_mut(&need_value_for_name)
-                    .expect("need_value_for_name set for unknown flag")
-                    .set_value_parsed(arg)?;
-                need_value_for_name = String::from("");
+                self.positionals.push(arg.to_string())
+            } else if let Some(name) = need_value_for_name {
+                let value = &mut self
+                    .flags
+                    .get_mut(&name)
+                    .expect(&format!(
+                        "need_value_for_name set for unknown flag '{name}'"
+                    ))
+                    .value;
+                if !self.set_flags.contains(&name) {
+                    value.clear();
+                    self.set_flags.insert(name);
+                }
+                value.parse_and_set(&arg)?;
+                need_value_for_name = None;
             } else if arg == "-" {
                 // Some programs use "-" to signify that data will be read from
                 // stdin, so we treat it as a positional argument
-                self.positionals.push(arg)
+                self.positionals.push(arg.to_string());
             } else if arg == "--" {
                 // "--" is a special flag that treats all of the remaining
                 // arguments as positional arguments
@@ -365,121 +209,83 @@ impl Flags {
             } else if arg.starts_with("--") {
                 let name = &arg[2..];
                 match self.flags.get_mut(name) {
-                    Some(flag) => match &mut flag.value {
-                        FlagValue::Bool(v) => *v = true,
-                        _ => need_value_for_name = name.to_string(),
-                    },
-                    None => return Err(format!("Unknown flag: --{name}")),
+                    Some(flag) => {
+                        if flag.value.is_bool() {
+                            flag.value.set_true();
+                        } else {
+                            need_value_for_name = Some(flag.name.clone());
+                        }
+                    }
+                    None => return Err(StringError::new(format!("Unknown flag: --{name}"))),
                 }
             } else if arg.starts_with("-") {
                 let shorthands = &arg[1..];
                 for c in shorthands.chars() {
                     match self.shorthand_names.get(&c) {
                         Some(name) => match self.flags.get_mut(name) {
-                            Some(flag) => match &mut flag.value {
-                            FlagValue::Bool(v) => *v = true,
-                            _ => need_value_for_name = name.to_string(),
-                            },
+                            Some(flag) => {
+                                if flag.value.is_bool() {
+                                    flag.value.set_true();
+                                } else {
+                                    need_value_for_name = Some(flag.name.clone());
+                                }
+                            }
                             None => panic!("shorthand_names contains key '{c}', but flags does not contain key '{name}'"),
                         },
-                        None => return Err(format!("Unknown flag: -{c}")),
+                        None => return Err(StringError::new(format!("Unknown flag: -{c}"))),
                     }
                 }
             } else {
-                self.positionals.push(arg)
+                self.positionals.push(arg.to_string());
             }
         }
 
         Ok(())
     }
 
-    fn parse_json(flags: &mut HashMap<String, Flag>, json: &String) -> Result<(), String> {
-        match serde_json::from_str::<Value>(&json) {
-            Ok(data) => match data {
-                Value::Object(map) => {
-                    for (name, value) in map {
-                        let name = name.as_str();
-                        match flags.get_mut(name) {
-                            Some(flag) => match value {
-                                Value::Bool(b) => match &mut flag.value {
-                                    FlagValue::Bool(v) => *v = b,
-                                    _ => return Err(format!("Property '{name}' is not of type bool!"))
-                                },
-                                Value::String(s) => match &mut flag.value {
-                                    FlagValue::String(v) => *v = s,
-                                    _ => return Err(format!("Property '{name}' is not of type string!"))
-                                },
-                                Value::Number(number) => match &mut flag.value {
-                                    FlagValue::Int64(v) => match number.as_i64() {
-                                        Some(n) => *v = n,
-                                        None => return Err(format!("Property '{name}' could not be parsed as an i64!")),
-                                    },
-                                    FlagValue::Int128(v) => match number.as_i128() {
-                                        Some(n) => *v = n,
-                                        None => return Err(format!("Property '{name}' could not be parsed as an i128!")),
-                                    },
-                                    FlagValue::Float64(v) => match number.as_f64() {
-                                        Some(n) => *v = n,
-                                        None => return Err(format!("Property '{name}' could not be parsed as a f64!")),
-                                    },
-                                    _ => return Err(format!("Property '{name}' is not of type number!"))
-                                },
-                                Value::Array(array) => {
-                                    for (i, array_value) in array.iter().enumerate() {
-                                        match array_value {
-                                            Value::String(s) => match &mut flag.value {
-                                                FlagValue::StringArray(v) => if i == 0 { *v = vec![s.to_string()]} else {v.push(s.to_string())},
-                                                _ => return Err(format!("Property '{name}' is not of type string[]!"))
-                                            },
-                                            Value::Number(number) => match &mut flag.value {
-                                                FlagValue::Int64Array(v) => match number.as_i64() {
-                                                    Some(n) => if i == 0 { *v = vec![n]} else {v.push(n)},
-                                                    None => return Err(format!("Property '{name}' could not be parsed as a Vec<i64>!")),
-                                                },
-                                                FlagValue::Int128Array(v) => match number.as_i128() {
-                                                    Some(n) => if i == 0 { *v = vec![n]} else {v.push(n)},
-                                                    None => return Err(format!("Property '{name}' could not be parsed as a Vec<i128>!")),
-                                                },
-                                                FlagValue::Float64Array(v) => match number.as_f64() {
-                                                    Some(n) => if i == 0 { *v = vec![n]} else {v.push(n)},
-                                                    None => return Err(format!("Property '{name}' could not be parsed as a Vec<f64>!")),
-                                                },
-                                                _ => return Err(format!("Property '{name}' is not of type number[]!"))
-                                            },
-                                            _ => {},
-                                        }
-                                    }
-                                },
-                                _ => return Err(format!("Property '{name}' is of the wrong type!")),
-                            },
-                            None => return Err(format!("Unknown property: {name}"))
-                        }
+    fn parse_json(&mut self, json: String) -> Result<(), Box<dyn Error>> {
+        let value = serde_json::from_str::<Value>(&json)?;
+        if let Value::Object(map) = value {
+            for (name, value) in map {
+                if let Some(flag) = self.flags.get_mut(&name) {
+                    if !self.set_flags.contains(&flag.name) {
+                        flag.value.clear();
+                        self.set_flags.insert(flag.name.clone());
                     }
-                },
-                _ => return Err(
-                    "Config must be a JSON Object with keys as flag names and values as flag values.".to_string()
-                ),
-            },
-            Err(err) => return Err(format!("Failed to parse JSON: {err}")),
-        };
-        Ok(())
+                    if !flag.value.try_set_json(value) {
+                        return Err(StringError::new(format!(
+                            "JSON value for flag '{}' is of the wrong type",
+                            flag.name
+                        )));
+                    }
+                } else {
+                    return Err(StringError::new(format!(
+                        "Unknown flag found in JSON: {name}"
+                    )));
+                }
+            }
+            Ok(())
+        } else {
+            Err(StringError::new(format!(
+                "Config must be a JSON Object with flag names as keys and flag values as values"
+            )))
+        }
     }
 
     pub fn load(
         &mut self,
-        env_vars: &HashMap<String, String>,
-        args: &Vec<String>,
-    ) -> Result<(), String> {
+        env_vars: HashMap<String, String>,
+        args: Vec<String>,
+    ) -> Result<(), Box<dyn Error>> {
         // 1. Config files
-        for path in &self.config_files {
+        for path in &self.config_files.clone() {
             if Path::new(path).exists() {
                 match File::open(path) {
                     Ok(mut file) => {
                         let mut json = String::new();
                         if let Err(err) = file.read_to_string(&mut json) {
                             eprintln!("Failed to read config file '{path}': {err}")
-                        }
-                        if let Err(err) = Flags::parse_json(&mut self.flags, &json) {
+                        } else if let Err(err) = self.parse_json(json) {
                             eprintln!("Config file '{path}' is invalid: {err}")
                         }
                     }
@@ -489,41 +295,28 @@ impl Flags {
         }
 
         // 2. Environment variables
+        self.set_flags.clear();
         for flag in self.flags.values_mut() {
             if let Some(value) = env_vars.get(&flag.get_env_var_name()) {
-                match flag.default_value {
-                    FlagValue::StringArray(_)
-                    | FlagValue::Int64Array(_)
-                    | FlagValue::Int128Array(_)
-                    | FlagValue::Float64Array(_) => {
-                        let delim = flag.env_var_delimiter.to_owned();
-                        match delim {
-                        Some(delim) => for item in value.split(&delim) {
-                            flag.set_value_parsed(item.to_string())?;
-                        },
-                        None => eprintln!(
-                            "Warning: Setting '{}' using the environment variable '{}' is unsupported.",
-                            flag.name,
-                            flag.get_env_var_name()
-                        ),
+                if flag.value.is_vec() {
+                    if let Some(delim) = flag.get_env_var_delimiter() {
+                        for value in value.split(&delim) {
+                            flag.value.parse_and_set(value)?;
+                        }
+                    } else {
+                        eprintln!("Warning: Setting '{}' using the environment variable '{}' is unsupported.", flag.name, flag.get_env_var_name());
                     }
-                    }
-                    _ => flag.set_value_parsed(value.to_string())?,
+                } else {
+                    flag.value.parse_and_set(value)?;
                 }
             }
         }
-        for flag in self.flags.values_mut() {
-            flag.is_set = false;
-        }
 
         // 3. Args
+        self.set_flags.clear();
         self.parse_args(args)?;
 
         Ok(())
-    }
-
-    pub fn positionals(&self) -> &Vec<String> {
-        &self.positionals
     }
 }
 
@@ -532,19 +325,19 @@ mod tests {
     use super::*;
 
     fn sample_flag() -> Flag {
-        Flag::new("my-bool", FlagValue::Bool(false)).shorthand('b')
+        Flag::new("my-bool", false).shorthand('b')
     }
 
     #[test]
     #[should_panic]
     fn test_new_flag_invalid_name() {
-        Flag::new("My invalid flag name!", FlagValue::Bool(false));
+        Flag::new("My invalid flag name!", false);
     }
 
     #[test]
     #[should_panic]
     fn test_new_flag_invalid_shorthand() {
-        Flag::new("My invalid flag name!", FlagValue::Bool(false)).shorthand('$');
+        Flag::new("My invalid flag name!", false).shorthand('$');
     }
 
     #[test]
@@ -563,92 +356,48 @@ mod tests {
 
     fn sample_flags() -> Flags {
         let mut flags = Flags::new();
-        flags.add(Flag::new("my-bool", FlagValue::Bool(false)).shorthand('b'));
-        flags.add(Flag::new("my-string", FlagValue::String("1".into())).shorthand('s'));
-        flags.add(Flag::new("my-int64", FlagValue::Int64(1)).shorthand('i'));
-        flags.add(Flag::new("my-int128", FlagValue::Int128(1)).shorthand('j'));
-        flags.add(Flag::new("my-float64", FlagValue::Float64(1.0)).shorthand('f'));
-        flags.add(
-            Flag::new(
-                "my-string-array",
-                FlagValue::StringArray(to_string_vec(vec!["1", "2"])),
-            )
-            .shorthand('S'),
-        );
-        flags.add(Flag::new("my-int64-array", FlagValue::Int64Array(vec![1, 2])).shorthand('I'));
-        flags.add(Flag::new("my-int128-array", FlagValue::Int128Array(vec![1, 2])).shorthand('J'));
-        flags.add(
-            Flag::new("my-float64-array", FlagValue::Float64Array(vec![1.0, 2.0])).shorthand('F'),
-        );
+        flags.add(Flag::new("my-bool", false).shorthand('b'));
+        flags.add(Flag::new("my-string", "1".to_string()).shorthand('s'));
+        flags.add(Flag::new("my-int64", 1i64).shorthand('i'));
+        flags.add(Flag::new("my-int128", 1i128).shorthand('j'));
+        flags.add(Flag::new("my-float64", 1.0).shorthand('f'));
+        flags.add(Flag::new("my-string-array", to_string_vec(vec!["1", "2"])).shorthand('S'));
+        flags.add(Flag::new("my-int64-array", vec![1i64, 2i64]).shorthand('I'));
+        flags.add(Flag::new("my-int128-array", vec![1i128, 2i128]).shorthand('J'));
+        flags.add(Flag::new("my-float64-array", vec![1.0, 2.0]).shorthand('F'));
         flags
     }
 
     #[test]
     fn test_get() {
         let flags = sample_flags();
-        assert_eq!(flags.get_bool("my-bool"), false);
-        assert_eq!(flags.get_string("my-string"), String::from("1"));
-        assert_eq!(flags.get_i64("my-int64"), 1);
-        assert_eq!(flags.get_i128("my-int128"), 1);
-        assert_eq!(flags.get_f64("my-float64"), 1.0);
+        assert_eq!(flags.get::<bool>("my-bool"), false);
+        assert_eq!(flags.get::<String>("my-string"), String::from("1"));
+        assert_eq!(flags.get::<i64>("my-int64"), 1);
+        assert_eq!(flags.get::<i128>("my-int128"), 1);
+        assert_eq!(flags.get::<f64>("my-float64"), 1.0);
         assert_eq!(
-            flags.get_string_array("my-string-array"),
+            flags.get::<Vec<String>>("my-string-array"),
             to_string_vec(vec!["1", "2"])
         );
-        assert_eq!(flags.get_i64_array("my-int64-array"), vec![1, 2]);
-        assert_eq!(flags.get_i128_array("my-int128-array"), vec![1, 2]);
-        assert_eq!(flags.get_f64_array("my-float64-array"), vec![1.0, 2.0]);
+        assert_eq!(flags.get::<Vec<i64>>("my-int64-array"), vec![1, 2]);
+        assert_eq!(flags.get::<Vec<i128>>("my-int128-array"), vec![1, 2]);
+        assert_eq!(flags.get::<Vec<f64>>("my-float64-array"), vec![1.0, 2.0]);
     }
 
     fn assert_new_values_match(flags: &Flags) {
-        assert_eq!(flags.get_bool("my-bool"), true);
-        assert_eq!(flags.get_string("my-string"), "0");
-        assert_eq!(flags.get_i64("my-int64"), 0);
-        assert_eq!(flags.get_i128("my-int128"), 0);
-        assert_eq!(flags.get_f64("my-float64"), 0.0);
+        assert_eq!(flags.get::<bool>("my-bool"), true);
+        assert_eq!(flags.get::<String>("my-string"), "0");
+        assert_eq!(flags.get::<i64>("my-int64"), 0);
+        assert_eq!(flags.get::<i128>("my-int128"), 0);
+        assert_eq!(flags.get::<f64>("my-float64"), 0.0);
         assert_eq!(
-            flags.get_string_array("my-string-array"),
+            flags.get::<Vec<String>>("my-string-array"),
             to_string_vec(vec!["3", "4"])
         );
-        assert_eq!(flags.get_i64_array("my-int64-array"), vec![3, 4]);
-        assert_eq!(flags.get_i128_array("my-int128-array"), vec![3, 4]);
-        assert_eq!(flags.get_f64_array("my-float64-array"), vec![3.0, 4.0]);
-    }
-
-    #[test]
-    fn test_set_value_parsed() -> Result<(), String> {
-        let mut flags = sample_flags();
-        flags.get_mut("my-bool").set_value_parsed("true".into())?;
-        flags.get_mut("my-string").set_value_parsed("0".into())?;
-        flags.get_mut("my-int64").set_value_parsed("0".into())?;
-        flags.get_mut("my-int128").set_value_parsed("0".into())?;
-        flags.get_mut("my-float64").set_value_parsed("0.0".into())?;
-        flags
-            .get_mut("my-string-array")
-            .set_value_parsed("3".into())?;
-        flags
-            .get_mut("my-string-array")
-            .set_value_parsed("4".into())?;
-        flags
-            .get_mut("my-int64-array")
-            .set_value_parsed("3".into())?;
-        flags
-            .get_mut("my-int64-array")
-            .set_value_parsed("4".into())?;
-        flags
-            .get_mut("my-int128-array")
-            .set_value_parsed("3".into())?;
-        flags
-            .get_mut("my-int128-array")
-            .set_value_parsed("4".into())?;
-        flags
-            .get_mut("my-float64-array")
-            .set_value_parsed("3.0".into())?;
-        flags
-            .get_mut("my-float64-array")
-            .set_value_parsed("4.0".into())?;
-        assert_new_values_match(&flags);
-        Ok(())
+        assert_eq!(flags.get::<Vec<i64>>("my-int64-array"), vec![3, 4]);
+        assert_eq!(flags.get::<Vec<i128>>("my-int128-array"), vec![3, 4]);
+        assert_eq!(flags.get::<Vec<f64>>("my-float64-array"), vec![3.0, 4.0]);
     }
 
     fn sample_args() -> Vec<String> {
@@ -689,17 +438,17 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_args() -> Result<(), String> {
+    fn test_parse_args() -> Result<(), Box<dyn Error>> {
         let mut flags = sample_flags();
-        flags.parse_args(&sample_args())?;
+        flags.parse_args(sample_args())?;
         assert_new_values_match(&flags);
         Ok(())
     }
 
     #[test]
-    fn test_parse_args_shorthand() -> Result<(), String> {
+    fn test_parse_args_shorthand() -> Result<(), Box<dyn Error>> {
         let mut flags = sample_flags();
-        flags.parse_args(&sample_args_shorthand())?;
+        flags.parse_args(sample_args_shorthand())?;
         assert_new_values_match(&flags);
         Ok(())
     }
@@ -722,9 +471,9 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_json() -> Result<(), String> {
+    fn test_parse_json() -> Result<(), Box<dyn Error>> {
         let mut flags = sample_flags();
-        Flags::parse_json(&mut flags.flags, &sample_json())?;
+        flags.parse_json(sample_json())?;
         assert_new_values_match(&flags);
         Ok(())
     }

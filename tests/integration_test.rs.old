@@ -1,6 +1,6 @@
 use std::{collections::HashMap, env};
 
-use cliconf::{Flag, FlagValue, Flags};
+use cliconf::{Flag, Flags};
 
 fn to_string_vec(strs: Vec<&str>) -> Vec<String> {
     strs.iter().map(|s| s.to_string()).collect()
