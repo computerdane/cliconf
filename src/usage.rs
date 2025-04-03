@@ -6,9 +6,6 @@ use std::{
 use crate::{FlagValue, Flags};
 
 pub fn generate<W: Write>(flags: &Flags, width: usize, w: &mut W) -> io::Result<()> {
-    let indentation = "    ";
-    let max_desc_width = width - indentation.len();
-
     let mut names: Vec<String> = flags.flags.keys().cloned().collect();
     names.sort();
     let names = names;
@@ -55,6 +52,9 @@ pub fn generate<W: Write>(flags: &Flags, width: usize, w: &mut W) -> io::Result<
                 append_default_value(format!("[{}]", strings.join(", ")))
             }
         }
+
+        let indentation = "    ";
+        let max_desc_width = width - indentation.len();
 
         let mut l = 0;
         while l < desc.len() {
