@@ -3,16 +3,20 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(CliConf, Default, Serialize, Deserialize)]
+#[serde(default)]
 struct Conf {
     my_bool: bool,
     my_string: String,
     my_num: i32,
+    #[delimiter = ","]
+    my_string_vec: Vec<String>,
 }
 
 fn assertions(c: &Conf) {
     assert_eq!(c.my_bool, true);
     assert_eq!(c.my_string, "1");
     assert_eq!(c.my_num, 1);
+    assert_eq!(c.my_string_vec, ["1", "2"]);
 }
 
 #[test]
@@ -23,12 +27,14 @@ fn test_env() {
     vars.insert("MY_BOOL", "true");
     vars.insert("MY_STRING", "1");
     vars.insert("MY_NUM", "1");
+    vars.insert("MY_STRING_VEC", "1,2");
     let vars: HashMap<String, String> = vars
         .iter()
         .map(|(key, val)| (key.to_string(), val.to_string()))
         .collect();
 
     c.parse_env(vars);
+
     assertions(&c);
 }
 
@@ -36,12 +42,23 @@ fn test_env() {
 fn test_args() {
     let mut c = Conf::default();
 
-    let args: Vec<String> = vec!["--my-bool", "--my-string", "1", "--my-num", "1"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let args: Vec<String> = vec![
+        "--my-bool",
+        "--my-string",
+        "1",
+        "--my-num",
+        "1",
+        "--my-string-vec",
+        "1",
+        "--my-string-vec",
+        "2",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
 
     c.parse_args(args);
+
     assertions(&c);
 }
 
@@ -51,7 +68,8 @@ fn test_json() {
         {
             "my_bool": true,
             "my_string": "1",
-            "my_num": 1
+            "my_num": 1,
+            "my_string_vec": ["1", "2"]
         }
     "#;
 

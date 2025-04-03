@@ -1,7 +1,10 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use std::collections::HashMap;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, PathArguments, Type, TypePath};
+use syn::{
+    parse_macro_input, Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, Meta,
+    PathArguments, Type, TypePath,
+};
 
 #[allow(dead_code)]
 trait CliConf {
@@ -9,19 +12,49 @@ trait CliConf {
     fn parse_args(&mut self, args: Vec<String>) -> Vec<String>;
 }
 
-fn is_bool_type(ty: &Type) -> bool {
+fn is_bool(ty: &Type) -> bool {
     if let Type::Path(TypePath { path, .. }) = ty {
-        if path.segments.len() == 1 {
-            let segment = &path.segments[0];
+        if let Some(segment) = path.segments.first() {
             if let PathArguments::None = segment.arguments {
                 return segment.ident == "bool";
             }
         }
     }
-    return false;
+    false
 }
 
-#[proc_macro_derive(CliConf)]
+fn is_vec(ty: &Type) -> bool {
+    if let Type::Path(TypePath { path, .. }) = ty {
+        if let Some(segment) = path.segments.last() {
+            if segment.ident == "Vec" {
+                if let PathArguments::AngleBracketed(args) = &segment.arguments {
+                    return args
+                        .args
+                        .iter()
+                        .any(|arg| matches!(arg, GenericArgument::Type(_)));
+                }
+            }
+        }
+    }
+    false
+}
+
+fn get_delimiter_attribute(attrs: &[Attribute]) -> Option<String> {
+    for attr in attrs {
+        if let Meta::NameValue(nv) = &attr.meta {
+            if nv.path.is_ident("delimiter") {
+                if let Expr::Lit(expr_lit) = &nv.value {
+                    if let Lit::Str(lit_str) = &expr_lit.lit {
+                        return Some(lit_str.value());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+#[proc_macro_derive(CliConf, attributes(delimiter))]
 pub fn derive_flags(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
@@ -36,25 +69,69 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
                 let field_name_string = field_name.clone().unwrap().to_string();
                 let var_name = field_name_string.to_uppercase();
                 let arg_name = field_name_string.replace("_", "-");
+                let field_is_vec = is_vec(&f.ty);
+
+                let delimiter = get_delimiter_attribute(&f.attrs);
+
+                let parse_env_op = if field_is_vec {
+                    if let Some(delimiter) = delimiter {
+                        quote! (
+                            for value in value.split(&#delimiter) {
+                                self.#field_name.push(value.parse().expect(&format!(
+                                    "Failed to parse environment variable {}",
+                                    #var_name
+                                )));
+                            }
+                        )
+                    } else {
+                        quote!()
+                    }
+                } else {
+                    quote!(
+                        self.#field_name = value
+                            .parse()
+                            .expect(&format!("Failed to parse environment variable {}", #var_name));
+                    )
+                };
 
                 parse_env.push(quote! {
                     if let Some(value) = vars.get(#var_name) {
-                        self.#field_name = value.parse().expect(&format!("Failed to parse environment variable {}", #var_name));
+                        #parse_env_op
                     }
                 });
 
+                let parse_arg_op = if field_is_vec {
+                    quote!(
+                        if !cleared_vecs.contains(#field_name_string) {
+                            self.#field_name.clear();
+                            cleared_vecs.insert(#field_name_string);
+                        }
+                        self.#field_name.push(arg
+                            .parse()
+                            .expect(&format!("Failed to parse arg {}", #arg_name)));
+                    )
+                } else {
+                    quote!(
+                        self.#field_name = arg
+                            .parse()
+                            .expect(&format!("Failed to parse arg {}", #arg_name));
+                    )
+                };
+
                 parse_arg.push(quote! (
-                    #field_name_string => self.#field_name = arg.parse().expect(&format!("Failed to parse arg {}", #arg_name)),
+                    #field_name_string => {
+                        #parse_arg_op
+                    }
                 ));
 
-                let set_or_need = if is_bool_type(&f.ty) {
+                let need_arg_op = if is_bool(&f.ty) {
                     quote! (self.#field_name = true)
                 } else {
                     quote! (need_value_for_name = Some(#field_name_string))
                 };
 
                 need_arg.push(quote! (
-                    #arg_name => #set_or_need,
+                    #arg_name => #need_arg_op,
                 ))
             }
         } else {
@@ -74,6 +151,7 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
                 let mut positionals = vec![];
                 let mut need_value_for_name: Option<&str> = None;
                 let mut as_positionals = false;
+                let mut cleared_vecs = std::collections::HashSet::new();
 
                 for arg in args {
                     if as_positionals {
