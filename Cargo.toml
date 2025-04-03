@@ -1,6 +1,6 @@
 [package]
 name = "cliconf"
-version = "0.1.3"
+version = "0.2.0"
 edition = "2021"
 description = "Dead-simple configuration for Rust CLI tools."
 repository = "https://github.com/computerdane/cliconf"

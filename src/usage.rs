@@ -9,16 +9,16 @@ pub fn generate<W: Write>(flags: &Flags, width: usize, w: &mut W) -> io::Result<
     let indentation = "    ";
     let max_desc_width = width - indentation.len();
 
-    let mut names: Vec<&str> = flags.flags.keys().cloned().collect();
+    let mut names: Vec<String> = flags.flags.keys().cloned().collect();
     names.sort();
     let names = names;
 
     for (n, name) in names.iter().enumerate() {
-        let flag = flags.flags.get(name).unwrap();
+        let flag = flags.get(name);
         if let None = flag.description {
             continue;
         }
-        if flags.flags_excluded_from_usage.contains(flag.name) {
+        if flag.exclude_from_usage {
             continue;
         }
 
@@ -30,7 +30,7 @@ pub fn generate<W: Write>(flags: &Flags, width: usize, w: &mut W) -> io::Result<
         }
         w.write(b"\n")?;
 
-        let mut desc = flag.description.unwrap().to_string();
+        let mut desc = flag.description.as_ref().unwrap().to_string();
         let mut append_default_value = |value: String| {
             desc += &format!(" (default: {value})");
         };
@@ -96,31 +96,30 @@ mod tests {
     #[test]
     fn test_generate() {
         let mut flags = Flags::new();
-        flags.add(Flag {
-            name: "name",
-            shorthand: Some('n'),
-            default_value: FlagValue::String("john".to_string()),
-            description: Some("The person we want to greet"),
-        });
-        flags.add(Flag {
-            name: "long",
-            shorthand: Some('l'),
-            default_value: FlagValue::String("long".to_string()),
-            description: Some("A flag with a super duper long description. Like, this is a very long description and is totally overwhelming the user. We really need to stop making things so long and complicated guys. The poor users can't handle it!"),
-        });
-        flags.add(Flag {
-            name: "zzz",
-            shorthand: None,
-            default_value: FlagValue::Bool(false),
-            description: Some("An argument with no shorthand!"),
-        });
-        flags.add(Flag {
-            name: "excluded",
-            shorthand: None,
-            default_value: FlagValue::Bool(false),
-            description: Some("This flag is excluded from the usage string"),
-        });
-        flags.exclude_flag_from_usage("excluded");
+        // flags.add(Flag {
+        //     name: "name",
+        //     shorthand: Some('n'),
+        //     default_value: FlagValue::String("john".to_string()),
+        //     description: Some("The person we want to greet"),
+        // });
+        flags.add(
+            Flag::new("name", FlagValue::String("john".into()))
+                .shorthand('n')
+                .description("The person we want to greet"),
+        );
+        flags.add(
+            Flag::new("long", FlagValue::String("long".into()))
+                .shorthand('l')
+                .description("A flag with a super duper long description. Like, this is a very long description and is totally overwhelming the user. We really need to stop making things so long and complicated guys. The poor users can't handle it!"),
+        );
+        flags.add(
+            Flag::new("zzz", FlagValue::Bool(false)).description("An argument with no shorthand!"),
+        );
+        flags.add(
+            Flag::new("excluded", FlagValue::Bool(false))
+                .description("This flag is excluded from the usage string")
+                .exclude_from_usage(),
+        );
 
         let target = "--long / -l
     A flag with a super duper long description. Like, this is a very long 

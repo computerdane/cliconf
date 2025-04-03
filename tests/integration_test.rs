@@ -1,125 +1,81 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, env};
 
 use cliconf::{Flag, FlagValue, Flags};
 
-fn to_string_vec(strs: &Vec<&str>) -> Vec<String> {
+fn to_string_vec(strs: Vec<&str>) -> Vec<String> {
     strs.iter().map(|s| s.to_string()).collect()
 }
 
 fn assert_values_match(flags: &Flags) {
-    assert_eq!(*flags.get_string("host"), "localhost");
-    assert_eq!(*flags.get_i64("port"), 3000);
-    assert_eq!(*flags.get_i128("max-size"), 999999999999999);
-    assert_eq!(*flags.get_bool("timeout"), true);
-    assert_eq!(*flags.get_f64("timeout-sec"), 1.5);
+    assert_eq!(flags.get_string("host"), "localhost");
+    assert_eq!(flags.get_i64("port"), 3000);
+    assert_eq!(flags.get_i128("max-size"), 999999999999999);
+    assert_eq!(flags.get_bool("timeout"), true);
+    assert_eq!(flags.get_f64("timeout-sec"), 1.5);
     assert_eq!(
-        *flags.get_string_array("user"),
-        to_string_vec(&vec!["scott", "allie"])
+        flags.get_string_array("user"),
+        to_string_vec(vec!["scott", "allie"])
     );
-    assert_eq!(*flags.get_i64_array("udp-port"), vec![5000, 5001, 5002]);
+    assert_eq!(flags.get_i64_array("udp-port"), vec![5000, 5001, 5002]);
     assert_eq!(
-        *flags.get_i128_array("allowed-input-range"),
+        flags.get_i128_array("allowed-input-range"),
         vec![20000000000000, 30000000000000]
     );
-    assert_eq!(*flags.get_f64_array("allowed-output-range"), vec![6.5, 8.5]);
+    assert_eq!(flags.get_f64_array("allowed-output-range"), vec![6.5, 8.5]);
 }
 
 fn assert_overridden_values_match(flags: &Flags) {
-    assert_eq!(*flags.get_string("host"), "127.0.0.1");
-    assert_eq!(*flags.get_i64("port"), 8080);
-    assert_eq!(*flags.get_i128("max-size"), 999999999999999);
-    assert_eq!(*flags.get_bool("timeout"), true);
-    assert_eq!(*flags.get_f64("timeout-sec"), 1.5);
+    assert_eq!(flags.get_string("host"), "127.0.0.1");
+    assert_eq!(flags.get_i64("port"), 8080);
+    assert_eq!(flags.get_i128("max-size"), 999999999999999);
+    assert_eq!(flags.get_bool("timeout"), true);
+    assert_eq!(flags.get_f64("timeout-sec"), 1.5);
     assert_eq!(
-        *flags.get_string_array("user"),
-        to_string_vec(&vec!["john", "aria"])
+        flags.get_string_array("user"),
+        to_string_vec(vec!["john", "aria"])
     );
-    assert_eq!(*flags.get_i64_array("udp-port"), vec![4000, 4001]);
+    assert_eq!(flags.get_i64_array("udp-port"), vec![4000, 4001]);
     assert_eq!(
-        *flags.get_i128_array("allowed-input-range"),
+        flags.get_i128_array("allowed-input-range"),
         vec![20000000000000, 30000000000000]
     );
-    assert_eq!(*flags.get_f64_array("allowed-output-range"), vec![6.5, 8.5]);
+    assert_eq!(flags.get_f64_array("allowed-output-range"), vec![6.5, 8.5]);
 }
 
 fn assert_double_overridden_values_match(flags: &Flags) {
-    assert_eq!(*flags.get_string("host"), "127.0.0.2");
-    assert_eq!(*flags.get_i64("port"), 8080);
-    assert_eq!(*flags.get_i128("max-size"), 999999999999999);
-    assert_eq!(*flags.get_bool("timeout"), true);
-    assert_eq!(*flags.get_f64("timeout-sec"), 1.5);
+    assert_eq!(flags.get_string("host"), "127.0.0.2");
+    assert_eq!(flags.get_i64("port"), 8080);
+    assert_eq!(flags.get_i128("max-size"), 999999999999999);
+    assert_eq!(flags.get_bool("timeout"), true);
+    assert_eq!(flags.get_f64("timeout-sec"), 1.5);
     assert_eq!(
-        *flags.get_string_array("user"),
-        to_string_vec(&vec!["john", "aria"])
+        flags.get_string_array("user"),
+        to_string_vec(vec!["john", "aria"])
     );
-    assert_eq!(*flags.get_i64_array("udp-port"), vec![3000]);
+    assert_eq!(flags.get_i64_array("udp-port"), vec![3000]);
     assert_eq!(
-        *flags.get_i128_array("allowed-input-range"),
+        flags.get_i128_array("allowed-input-range"),
         vec![20000000000000, 30000000000000]
     );
-    assert_eq!(*flags.get_f64_array("allowed-output-range"), vec![6.5, 8.5]);
+    assert_eq!(flags.get_f64_array("allowed-output-range"), vec![6.5, 8.5]);
 }
 
-fn sample_flags<'a>() -> Flags<'a> {
+fn sample_flags() -> Flags {
     let mut flags = Flags::new();
-    flags.add(Flag {
-        name: "host",
-        shorthand: Some('h'),
-        default_value: FlagValue::String("".to_string()),
-        description: None,
-    });
-    flags.add(Flag {
-        name: "port",
-        shorthand: Some('p'),
-        default_value: FlagValue::Int64(80),
-        description: None,
-    });
-    flags.add(Flag {
-        name: "max-size",
-        shorthand: None,
-        default_value: FlagValue::Int128(10000),
-        description: None,
-    });
-    flags.add(Flag {
-        name: "timeout",
-        shorthand: None,
-        default_value: FlagValue::Bool(false),
-        description: None,
-    });
-    flags.add(Flag {
-        name: "timeout-sec",
-        shorthand: None,
-        default_value: FlagValue::Float64(10.0),
-        description: None,
-    });
-    flags.add(Flag {
-        name: "user",
-        shorthand: None,
-        default_value: FlagValue::StringArray(Vec::new()),
-        description: None,
-    });
-    flags.set_env_var_delimiter("user", ",");
-    flags.add(Flag {
-        name: "udp-port",
-        shorthand: None,
-        default_value: FlagValue::Int64Array(Vec::new()),
-        description: None,
-    });
-    flags.set_env_var_delimiter("udp-port", ",");
-    flags.add(Flag {
-        name: "allowed-input-range",
-        shorthand: None,
-        default_value: FlagValue::Int128Array(Vec::new()),
-        description: None,
-    });
-    flags.set_env_var_delimiter("allowed-input-range", "-");
-    flags.add(Flag {
-        name: "allowed-output-range",
-        shorthand: None,
-        default_value: FlagValue::Float64Array(Vec::new()),
-        description: None,
-    });
-    flags.set_env_var_delimiter("allowed-output-range", "-");
+    flags.add(Flag::new("host", FlagValue::String("".into())).shorthand('h'));
+    flags.add(Flag::new("port", FlagValue::Int64(80)).shorthand('p'));
+    flags.add(Flag::new("max-size", FlagValue::Int128(10000)));
+    flags.add(Flag::new("timeout", FlagValue::Bool(false)));
+    flags.add(Flag::new("timeout-sec", FlagValue::Float64(10.0)));
+    flags.add(Flag::new("user", FlagValue::StringArray(Vec::new())).env_var_delimiter(","));
+    flags.add(Flag::new("udp-port", FlagValue::Int64Array(Vec::new())).env_var_delimiter(","));
+    flags.add(
+        Flag::new("allowed-input-range", FlagValue::Int128Array(Vec::new())).env_var_delimiter("-"),
+    );
+    flags.add(
+        Flag::new("allowed-output-range", FlagValue::Float64Array(Vec::new()))
+            .env_var_delimiter("-"),
+    );
     flags
 }
 
@@ -180,7 +136,7 @@ fn test_load_env_vars_with_override() -> Result<(), String> {
 fn assert_positionals_match(positionals: &Vec<String>) {
     assert_eq!(
         *positionals,
-        to_string_vec(&vec![
+        to_string_vec(vec![
             "pos0",
             "pos1",
             "pos2",
@@ -195,7 +151,7 @@ fn assert_positionals_match(positionals: &Vec<String>) {
 #[test]
 fn test_load_args() -> Result<(), String> {
     let mut flags = sample_flags();
-    let args = to_string_vec(&vec![
+    let args = to_string_vec(vec![
         "pos0",
         "-h",
         "localhost",
@@ -247,7 +203,7 @@ fn test_double_override() -> Result<(), String> {
     env_vars.insert("PORT".to_string(), "8080".to_string());
     env_vars.insert("USER".to_string(), "john,aria".to_string());
     env_vars.insert("UDP_PORT".to_string(), "4000,4001".to_string());
-    let args = to_string_vec(&vec![
+    let args = to_string_vec(vec![
         "pos0",
         "-h",
         "127.0.0.2",
@@ -264,5 +220,32 @@ fn test_double_override() -> Result<(), String> {
     flags.load(&env_vars, &args)?;
     assert_double_overridden_values_match(&flags);
     assert_positionals_match(&flags.positionals());
+    Ok(())
+}
+
+#[test]
+fn test_readme_example() -> Result<(), String> {
+    let mut flags = Flags::new();
+    flags.add(
+        Flag::new("hello-name", FlagValue::String("world".into()))
+            .shorthand('n')
+            .description("Who to say hello to."),
+    );
+
+    flags.add_config_file("/var/lib/hello-world/config.json");
+    flags.add_home_config_file(".config/hello-world/config.json");
+
+    let env_vars: HashMap<String, String> = env::vars().collect();
+
+    let args: Vec<String> = env::args().collect();
+    let args = args[1..].to_vec(); // Exclude name of executable
+
+    flags.load(&env_vars, &args)?;
+
+    let name = flags.get_string("hello-name");
+    println!("Hello, {name}!");
+
+    let _positionals = flags.positionals();
+
     Ok(())
 }

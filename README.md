@@ -7,13 +7,14 @@ Dead-simple configuration for Rust CLI tools.
 Define a flag that your program accepts:
 
 ```rs
+use cliconf::{Flag, FlagValue, Flags};
+
 let mut flags = Flags::new();
-flags.add(Flag {
-    name: "hello-name",
-    shorthand: Some('n'),
-    default_value: FlagValue::String("world".to_string()),
-    description: Some("Who to say hello to."),
-});
+flags.add(
+    Flag::new("hello-name", FlagValue::String("world".into()))
+        .shorthand('n')
+        .description("Who to say hello to."),
+);
 ```
 
 Add one or more locations of config files:
