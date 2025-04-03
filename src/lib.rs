@@ -73,25 +73,30 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
 
                 let delimiter = get_delimiter_attribute(&f.attrs);
 
+                let parse_env_value = quote! {
+                    let value = value.parse().expect(&format!("Failed to parse environment variable {}", #var_name));
+                };
+
+                let parse_arg_value = quote! {
+                    let value = arg.parse().expect(&format!("Failed to parse command-line argument {}", #arg_name));
+                };
+
                 let parse_env_op = if field_is_vec {
                     if let Some(delimiter) = delimiter {
-                        quote! (
+                        quote! {
                             for value in value.split(&#delimiter) {
-                                self.#field_name.push(value.parse().expect(&format!(
-                                    "Failed to parse environment variable {}",
-                                    #var_name
-                                )));
+                                #parse_env_value
+                                self.#field_name.push(value);
                             }
-                        )
+                        }
                     } else {
-                        quote!()
+                        quote! {}
                     }
                 } else {
-                    quote!(
-                        self.#field_name = value
-                            .parse()
-                            .expect(&format!("Failed to parse environment variable {}", #var_name));
-                    )
+                    quote! {
+                        #parse_env_value
+                        self.#field_name = value;
+                    }
                 };
 
                 parse_env.push(quote! {
@@ -101,21 +106,19 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
                 });
 
                 let parse_arg_op = if field_is_vec {
-                    quote!(
+                    quote! {
                         if !cleared_vecs.contains(#field_name_string) {
                             self.#field_name.clear();
                             cleared_vecs.insert(#field_name_string);
                         }
-                        self.#field_name.push(arg
-                            .parse()
-                            .expect(&format!("Failed to parse arg {}", #arg_name)));
-                    )
+                        #parse_arg_value
+                        self.#field_name.push(value);
+                    }
                 } else {
-                    quote!(
-                        self.#field_name = arg
-                            .parse()
-                            .expect(&format!("Failed to parse arg {}", #arg_name));
-                    )
+                    quote! {
+                        #parse_arg_value
+                        self.#field_name = value;
+                    }
                 };
 
                 parse_arg.push(quote! (
