@@ -1,130 +1,99 @@
 # cliconf
 
-Dead-simple configuration for Rust CLI tools.
+Dead-simple configuration for Rust CLI tools
 
-# How it Works
+## Example
 
-Define a flag that your program accepts:
-
-```rs
-use cliconf::{Flag, FlagValue, Flags};
-
-let mut flags = Flags::new();
-flags.add(
-    Flag::new("hello-name", FlagValue::String("world".into()))
-        .shorthand('n')
-        .description("Who to say hello to."),
-);
-```
-
-Add one or more locations of config files:
+Create a struct that defines your program's flags:
 
 ```rs
-flags.add_config_file("/var/lib/hello-world/config.json");
-flags.add_home_config_file(".config/hello-world/config.json");
-```
+use cliconf::Parse;
 
-Load flags:
+#[derive(Parse)]
+struct Conf {
+    spanish: bool,
 
-```rs
-let env_vars: HashMap<String, String> = env::vars().collect();
+    #[cliconf(shorthand = 'n')]
+    name: String,
 
-let args: Vec<String> = env::args().collect();
-let args = args[1..].to_vec(); // Exclude name of executable
+    #[cliconf(shorthand = 'r')]
+    repeat: i32,
 
-flags.load(&env_vars, &args)?;
-```
-
-Get values:
-
-```rs
-let name = flags.get_string("hello-name");
-println!("Hello, {name}!");
-```
-
-Get non-flag arguments:
-
-```rs
-let positionals = flags.positionals();
-```
-
-# Using Flags
-
-Flags are always processed in the following order:
-
-1. Configuration files (processed in the order they are added)
-2. Environment variables
-3. Command-line arguments
-
-The following configuration methods all produce the same result:
-
-1. Configuration files
-
-```json
-{
-  "hello-name": "john"
+    #[cliconf(shorthand = 'N', delimiter = ",")]
+    extra_names: Vec<String>,
 }
 ```
 
-2. Environment variables
-
-```sh
-HELLO_NAME="john" hello-world
-```
-
-3. Command-line arguments
-
-```sh
-hello-world --hello-name "john"
-# or, using the shorthand
-hello-world -n "john"
-```
-
-Flags processed later-on in the cycle take precedence, so command-line
-arguments will override environment variables, which will override config
-files:
-
-```sh
-HELLO_NAME=from_environment hello-world -n from_args
-# Outputs: "Hello, from_args!"
-```
-
-# Types of Flags
-
-There are 9 types of flag values: `Bool` `String` `Int64` `Int128` `Float64`
-`StringArray` `Int64Array` `Int128Array` `Float64Array`. Set a flag's
-`default_value` to select one.
-
-The Rust types for each are as follows:
-
-| FlagValue::  | Type          |
-|--------------|---------------|
-| Bool         | `bool`        |
-| String       | `String`      |
-| Int64        | `i64`         |
-| Int128       | `i128`        |
-| Float64      | `f64`         |
-| StringArray  | `Vec<String>` |
-| Int64Array   | `Vec<i64>`    |
-| Int128Array  | `Vec<i128>`   |
-| Float64Array | `Vec<f64>`    |
-
-All flags must have default values. This is to ensure that your flags are
-always the correct type and that your program always has good opinionated
-defaults.
-
-To get values for each type of flag:
+Initialize the struct, then parse configuration from environment variables and
+command-line arguments:
 
 ```rs
-// Single Values
-let my_bool = flags.get_bool("my-bool");
-let my_string = flags.get_string("my-string");
-let my_int64 = flags.get_i64("my-int64");
-let my_int128 = flags.get_i128("my-int128");
-let my_float64 = flags.get_f64("my-float64");
-// Arrays
-let my_string_array = flags.get_string_array("my-string-array");
-let my_int64_array = flags.get_i64_array("my-int64-array");
-let my_int128_array = flags.get_i128_array("my-int128-array");
-let my_float64_array = flags.get_f64_array("my-float64-array");
+let mut conf = Conf {
+    spanish: false,
+    name: "world".into(),
+    repeat: 1,
+    extra_names: vec![],
+};
+conf.parse_env(std::env::vars().collect());
+conf.parse_args(std::env::args().skip(1).collect());
+let conf = conf;
+```
+
+Use the config throughout your program:
+
+```rs
+let (and, hello) = if conf.spanish {
+    ("y", "Hola")
+} else {
+    ("and", "Hello")
+};
+
+for _ in 0..conf.repeat {
+    println!("{hello}, {}!", conf.name);
+    for name in &conf.extra_names {
+        println!(" {and} {hello}, {}!", name);
+    }
+}
+```
+
+Now, your program will automatically configure itself when given matching
+environment variables and/or command-line arguments. Here are some examples:
+
+```sh
+hello
+# Hello, world!
+
+hello --name john
+# Hello, john!
+
+hello --name john --spanish
+# Hola, john!
+
+hello --name john --repeat 3
+# Hello, john!
+# Hello, john!
+# Hello, john!
+
+hello -n john -r 3
+#Hello, john!
+#Hello, john!
+#Hello, john!
+
+hello -n john -N aria -N scott -N allie
+# Hello, john!
+#  and Hello, aria!
+#  and Hello, scott!
+#  and Hello, allie!
+
+NAME=john hello
+# Hello, john!
+
+NAME=john hello --name scott
+# Hello, scott!
+
+SPANISH=true NAME=john EXTRA_NAMES=aria,scott,allie hello
+# Hola, john!
+#  y Hola, aria!
+#  y Hola, scott!
+#  y Hola, allie!
 ```

@@ -31,7 +31,7 @@ fn is_vec(ty: &Type) -> bool {
                     for arg in &args.args {
                         if let GenericArgument::Type(inner_ty) = arg {
                             if is_bool(&inner_ty) {
-                                panic!("CliConf does not support Vec<bool>!");
+                                panic!("cliconf::Parse does not support Vec<bool>!");
                             }
                             return true;
                         }
@@ -184,10 +184,10 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
                 }
             }
         } else {
-            panic!("CliConf can only be derived for structs with named fields");
+            panic!("cliconf::Parse can only be derived for structs with named fields");
         }
     } else {
-        panic!("CliConf can only be derived for structs");
+        panic!("cliconf::Parse can only be derived for structs");
     };
 
     let expanded = quote! {
@@ -200,7 +200,7 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
                 let mut positionals = vec![];
                 let mut need_value_for_name: Option<&str> = None;
                 let mut as_positionals = false;
-                let mut cleared_vecs = std::collections::HashSet::new();
+                let mut cleared_vecs = std::collections::HashSet::<&str>::new();
 
                 for arg in args {
                     if as_positionals {
