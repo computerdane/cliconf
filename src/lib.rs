@@ -2,12 +2,12 @@ use proc_macro::TokenStream;
 use quote::quote;
 use std::collections::HashMap;
 use syn::{
-    parse_macro_input, Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Lit, Meta,
-    PathArguments, Type, TypePath,
+    parse_macro_input, Attribute, Data, DeriveInput, Fields, GenericArgument, LitChar, LitStr,
+    Meta, MetaList, PathArguments, Type, TypePath,
 };
 
 #[allow(dead_code)]
-trait CliConf {
+trait Parse {
     fn parse_env(&mut self, vars: HashMap<String, String>);
     fn parse_args(&mut self, args: Vec<String>) -> Vec<String>;
 }
@@ -43,22 +43,51 @@ fn is_vec(ty: &Type) -> bool {
     false
 }
 
-fn get_delimiter_attribute(attrs: &[Attribute]) -> Option<String> {
+#[derive(Default)]
+struct CliconfAttrs {
+    shorthand: Option<char>,
+    delimiter: Option<String>,
+}
+
+fn get_meta<'a>(attrs: &'a [Attribute], name: &str) -> Option<&'a Meta> {
     for attr in attrs {
-        if let Meta::NameValue(nv) = &attr.meta {
-            if nv.path.is_ident("delimiter") {
-                if let Expr::Lit(expr_lit) = &nv.value {
-                    if let Lit::Str(lit_str) = &expr_lit.lit {
-                        return Some(lit_str.value());
-                    }
-                }
-            }
+        if attr.meta.path().is_ident(name) {
+            return Some(&attr.meta);
         }
     }
     None
 }
 
-#[proc_macro_derive(CliConf, attributes(delimiter))]
+fn get_meta_list<'a>(attrs: &'a [Attribute], name: &str) -> Option<&'a MetaList> {
+    if let Some(Meta::List(meta_list)) = get_meta(attrs, name) {
+        return Some(&meta_list);
+    }
+    None
+}
+
+fn get_cliconf_attrs(attrs: &[Attribute]) -> CliconfAttrs {
+    let mut result = CliconfAttrs::default();
+    if let Some(meta_list) = get_meta_list(attrs, "cliconf") {
+        meta_list
+            .parse_nested_meta(|meta| {
+                if meta.path.is_ident("shorthand") {
+                    let value = meta.value()?;
+                    let c: LitChar = value.parse()?;
+                    result.shorthand = Some(c.value());
+                }
+                if meta.path.is_ident("delimiter") {
+                    let value = meta.value()?;
+                    let s: LitStr = value.parse()?;
+                    result.delimiter = Some(s.value());
+                }
+                Ok(())
+            })
+            .expect("Failed to parse cliconf attribute");
+    }
+    result
+}
+
+#[proc_macro_derive(Parse, attributes(cliconf))]
 pub fn derive_flags(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
@@ -66,6 +95,7 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
     let mut parse_env = vec![];
     let mut parse_arg = vec![];
     let mut need_arg = vec![];
+    let mut need_arg_shorthand = vec![];
     if let Data::Struct(data_struct) = &input.data {
         if let Fields::Named(fields_named) = &data_struct.fields {
             for f in fields_named.named.iter() {
@@ -75,7 +105,7 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
                 let arg_name = field_name_string.replace("_", "-");
                 let field_is_vec = is_vec(&f.ty);
 
-                let delimiter = get_delimiter_attribute(&f.attrs);
+                let cliconf_attrs = get_cliconf_attrs(&f.attrs);
 
                 let parse_env_value = quote! {
                     let value = value.parse().expect(&format!("Failed to parse environment variable {}", #var_name));
@@ -86,7 +116,7 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
                 };
 
                 let parse_env_op = if field_is_vec {
-                    if let Some(delimiter) = delimiter {
+                    if let Some(delimiter) = cliconf_attrs.delimiter {
                         quote! {
                             self.#field_name.clear();
                             for value in value.split(&#delimiter) {
@@ -126,21 +156,32 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
                     }
                 };
 
-                parse_arg.push(quote! (
+                parse_arg.push(quote! {
                     #field_name_string => {
                         #parse_arg_op
                     }
-                ));
+                });
 
                 let need_arg_op = if is_bool(&f.ty) {
-                    quote! (self.#field_name = true)
+                    quote! {
+                        self.#field_name = true
+                    }
                 } else {
-                    quote! (need_value_for_name = Some(#field_name_string))
+                    quote! {
+                        need_value_for_name = Some(#field_name_string)
+                    }
                 };
 
-                need_arg.push(quote! (
+                need_arg.push(quote! {
                     #arg_name => #need_arg_op,
-                ))
+                });
+
+                if let Some(shorthand) = cliconf_attrs.shorthand {
+                    let shorthand = shorthand.to_string();
+                    need_arg_shorthand.push(quote! {
+                        #shorthand => #need_arg_op,
+                    });
+                }
             }
         } else {
             panic!("CliConf can only be derived for structs with named fields");
@@ -183,6 +224,12 @@ pub fn derive_flags(input: TokenStream) -> TokenStream {
                         match name {
                             #(#need_arg)*
                             _ => panic!("Unknown flag: --{name}")
+                        }
+                    } else if arg.starts_with("-") {
+                        let name = &arg[1..];
+                        match name {
+                            #(#need_arg_shorthand)*
+                            _ => panic!("Unknown flag: -{name}")
                         }
                     } else {
                         positionals.push(arg);

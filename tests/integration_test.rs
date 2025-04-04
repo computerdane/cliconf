@@ -1,14 +1,19 @@
-use cliconf::CliConf;
+use cliconf::Parse;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(CliConf, Default, Serialize, Deserialize)]
+#[derive(Parse, Default, Serialize, Deserialize)]
 #[serde(default)]
 struct Conf {
+    #[cliconf(shorthand = 'b')]
     my_bool: bool,
+
+    #[cliconf(shorthand = 's')]
     my_string: String,
+
     my_num: i32,
-    #[delimiter = ","]
+
+    #[cliconf(delimiter = ",", shorthand = 'v')]
     my_string_vec: Vec<String>,
 }
 
@@ -56,6 +61,20 @@ fn test_args() {
     .iter()
     .map(|s| s.to_string())
     .collect();
+
+    c.parse_args(args);
+
+    assertions(&c);
+}
+
+#[test]
+fn test_args_shorthand() {
+    let mut c = Conf::default();
+
+    let args: Vec<String> = vec!["-b", "-s", "1", "--my-num", "1", "-v", "1", "-v", "2"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
     c.parse_args(args);
 

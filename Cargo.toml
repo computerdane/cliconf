@@ -10,7 +10,6 @@ exclude = [".envrc", "flake*"]
 [dependencies]
 quote = "1.0.40"
 syn = "2.0.100"
-thiserror = "2.0.12"
 
 [dev-dependencies]
 serde = { version = "1.0.219", features = ["derive"] }
